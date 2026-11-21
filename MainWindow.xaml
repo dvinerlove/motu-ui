@@ -53,6 +53,17 @@
             </Button.Resources>
             <FontIcon Glyph="&#xE72C;" FontSize="13"/>
                 </Button>
+                <Button x:Name="BtnExp" Padding="10" MinWidth="36" MinHeight="32"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="experimental: show the ON AIR loopback card">
+            <Button.Resources>
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+            </Button.Resources>
+            <FontIcon x:Name="ExpIcon" Glyph="&#xE946;" FontSize="13"/>
+                </Button>
             </StackPanel>
         </Grid>
         <TextBlock x:Name="InfoText" Grid.Row="1"
@@ -170,7 +181,6 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="6">
                     <TextBlock Text="SAMPLE RATE" Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
@@ -206,19 +216,6 @@
                             <Ellipse x:Name="LlDot" Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{ThemeResource TextFillColorTertiaryBrush}"/>
                             <TextBlock x:Name="LlState" Text="Off"
-                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-                <StackPanel Grid.Column="4" Spacing="6">
-                    <TextBlock Text="EXPERIMENTAL" Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <Button x:Name="ExpSwitch" Height="36" Padding="12,0" HorizontalContentAlignment="Left"
-                            ToolTipService.ToolTip="show the ON AIR loopback card — bus level, mute, per-app stream list">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse x:Name="ExpDot" Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{ThemeResource TextFillColorTertiaryBrush}"/>
-                            <TextBlock x:Name="ExpState" Text="Off"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                         </StackPanel>
                     </Button>

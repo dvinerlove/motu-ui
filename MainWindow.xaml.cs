@@ -110,7 +110,7 @@ namespace MotuUI {
             };
             SrcSwitch.Click += (s, e) => Drv(() => MOTU.MSeriesSetWaveSRCEnabled(dev, srcOn ? 0u : 1u));
             LlSwitch.Click += (s, e) => Drv(() => { MOTU.MSeriesEnableLowLatencyMode(dev, !llOn); llOn = !llOn; });
-            ExpSwitch.Click += (s, e) => {
+            BtnExp.Click += (s, e) => {
                 expOn = !expOn;
                 try { File.WriteAllText(CfgPath, expOn ? "1" : "0"); } catch {}
                 PaintExp();
@@ -224,7 +224,8 @@ namespace MotuUI {
         }
 
         void PaintExp() {
-            Led(ExpDot, ExpState, expOn);
+            ExpIcon.Foreground = expOn ? (Microsoft.UI.Xaml.Media.Brush)On
+                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
             OnAirCard.Visibility = expOn ? Visibility.Visible : Visibility.Collapsed;
         }
 
