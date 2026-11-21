@@ -7,6 +7,12 @@ control panel does.
 
 ![screenshot](docs/screenshot.png)
 
+## Download
+
+Grab `motu-ui-v1.0.0-win-x86.zip` from
+[Releases](https://github.com/dvinerlove/motu-ui/releases) — self-contained,
+no .NET needed. Unzip and run `motu-ui.exe`.
+
 ## What it does
 
 - **Live input/output meters** — stereo LED ladders with peak hold and clip
