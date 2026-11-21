@@ -24,10 +24,16 @@ no .NET needed. Unzip and run `motu-ui.exe`.
 - **Live input/output meters** — stereo LED ladders with peak hold and clip
   indication, no DAW needed to see if signal is flowing
 - **Loopback meter** — a third ladder showing the loopback capture endpoint,
-  i.e. exactly what OBS and other recorders hear
+  i.e. exactly what OBS and other recorders hear, plus a 30-second history strip
+- **On-air app list** — every app feeding the loopback bus, with a live level
+  and a per-app mute that only affects the stream — you still hear it locally
+- **Loopback mute and recorder** — one click silences everything recorders
+  hear; another records the bus to a WAV file in your Music folder
 - **Test tone** — the speaker button plays a 440 Hz signal through the
-  device, so you can watch OUT and LOOP light up and confirm loopback
-  works for your stream/recording
+  device, so you can watch OUT and LOOP light up, confirm loopback works for
+  your stream/recording, and see the measured loop delay in ms
+- **Loopback health hints** — warns when Loopback Mix is live (your mic rides
+  the bus — echo risk) or when OUT plays but the loop stays silent
 - **Sample rate and buffer size** — apply instantly, with latency readout
 - **Low latency mode** — the driver switch the stock panel calls "Use lowest
   latency safety offsets"; here it's one click

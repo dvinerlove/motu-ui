@@ -11,6 +11,7 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0">
@@ -109,7 +110,66 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="3" Padding="16,12" CornerRadius="10"
+        <Border Grid.Row="3" Padding="16,10" CornerRadius="10"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="12"/>
+                </Grid.RowDefinitions>
+
+                <Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="ON AIR" Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <Border x:Name="MixBadge" Padding="5,0" CornerRadius="4" Visibility="Collapsed"
+                                Background="#22EBAF37" BorderBrush="#EBAF37" BorderThickness="1"
+                                ToolTipService.ToolTip="Loopback Mix is live — your mic rides the bus too, echo risk on stream">
+                            <TextBlock Text="MIX" FontSize="10" Foreground="#EBAF37"/>
+                        </Border>
+                        <TextBlock x:Name="LoopNote" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnLoopRec" Padding="10" MinWidth="32" MinHeight="28"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="record the loopback bus to a WAV file — what your stream heard">
+                            <Button.Resources>
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                            </Button.Resources>
+                            <Ellipse x:Name="RecDot" Width="9" Height="9" Fill="#E6463A"/>
+                        </Button>
+                        <Button x:Name="BtnLoopMute" Padding="10" MinWidth="32" MinHeight="28"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="mute the loopback bus — recorders hear nothing until you unmute">
+                            <Button.Resources>
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                            </Button.Resources>
+                            <FontIcon x:Name="LoopMuteIcon" Glyph="&#xE767;" FontSize="13"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock x:Name="LoopWarn" Grid.Row="1" Visibility="Collapsed" FontSize="11"
+                           Foreground="#EBAF37"
+                           Text="OUT is playing but the loop stays silent — recorders may be hearing nothing"/>
+
+                <StackPanel x:Name="AirSessions" Grid.Row="2" Spacing="4"/>
+                <Grid x:Name="AirHistoryHost" Grid.Row="3"/>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="4" Padding="16,12" CornerRadius="10"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">
@@ -161,7 +221,7 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="4" ColumnSpacing="16">
+        <Grid Grid.Row="5" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>

@@ -83,7 +83,7 @@ motu-ui puts everything the stock panel has - plus live metering it doesn't - in
 - Editable named presets, for example Record: 16 samples + low latency, Stream: 128 samples
 - A driver update checker that queries the MOTU download page for your specific model
 
-The app wraps the official MSeriesLib.dll that ships with the MOTU driver, so every change is applied by the vendor library and verified by reading device state back. It is a 32-bit process because the MOTU control library is 32-bit; it runs on Windows 10 1809 and later, on x86 and x64 machines. The official MOTU driver must be installed; motu-ui complements it rather than replacing it. Download from the GitHub Releases page.</Char_Desc_2000>
+The app wraps the official MSeriesLib.dll that ships with the MOTU driver, so changes are applied by the vendor library and device state is read back after each one. It is a 32-bit process because the MOTU control library is 32-bit; it runs on Windows 10 1809 and later, on x86 and x64 machines. The official MOTU driver must be installed; motu-ui complements it rather than replacing it. Download from the GitHub Releases page.</Char_Desc_2000>
     </English>
   </Program_Descriptions>
   <Web_Info>

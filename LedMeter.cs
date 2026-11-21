@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -15,11 +16,11 @@ namespace MotuUI {
         Rectangle clipTab;
         double gap = 2;
 
-        static readonly Color Green = Color.FromArgb(255, 70, 205, 110);
-        static readonly Color Amber = Color.FromArgb(255, 235, 175, 55);
-        static readonly Color Red = Color.FromArgb(255, 230, 70, 58);
-        static readonly Color Well = Color.FromArgb(255, 12, 13, 15);
-        static readonly Color PeakWhite = Color.FromArgb(255, 235, 245, 250);
+        internal static readonly Color Green = Color.FromArgb(255, 70, 205, 110);
+        internal static readonly Color Amber = Color.FromArgb(255, 235, 175, 55);
+        internal static readonly Color Red = Color.FromArgb(255, 230, 70, 58);
+        internal static readonly Color Well = Color.FromArgb(255, 12, 13, 15);
+        internal static readonly Color PeakWhite = Color.FromArgb(255, 235, 245, 250);
 
         static Color Zone(int i) {
             double f = (double)i / NSeg;
@@ -76,6 +77,60 @@ namespace MotuUI {
                 var b = (SolidColorBrush)segs[row * NSeg + i].Fill;
                 if (b.Color != c) b.Color = c;
             }
+        }
+    }
+
+    // Thin level bar for one app session — same -60..0 dB scale as LedMeter.
+    public class MiniBar : Grid {
+        const double MinDb = -60;
+        readonly Rectangle fill;
+        public MiniBar() {
+            var canvas = new Canvas { Background = new SolidColorBrush(LedMeter.Well) };
+            fill = new Rectangle { RadiusX = 1, RadiusY = 1, Fill = new SolidColorBrush(LedMeter.Green) };
+            canvas.Children.Add(fill);
+            Children.Add(canvas);
+            SizeChanged += (s, e) => Layout(lastDb);
+        }
+        double lastDb = MinDb;
+        public void SetDb(double db) { lastDb = db; Layout(db); }
+        void Layout(double db) {
+            double w = ActualWidth, h = ActualHeight;
+            if (w < 8 || h < 4) return;
+            double f = Math.Max(0, Math.Min(1, (db - MinDb) / -MinDb));
+            fill.Width = w * f; fill.Height = h;
+            var z = db > -6 ? LedMeter.Red : db > -18 ? LedMeter.Amber : LedMeter.Green;
+            var b = (SolidColorBrush)fill.Fill;
+            if (b.Color != z) b.Color = z;
+        }
+    }
+
+    // Rolling history of the loop bus level — one slim line, ~30 s at 10 Hz.
+    public class AirSpark : Canvas {
+        const int N = 300;
+        readonly float[] vals = new float[N];
+        int head, count;
+        readonly Microsoft.UI.Xaml.Shapes.Polyline line = new Microsoft.UI.Xaml.Shapes.Polyline();
+        public AirSpark() {
+            line.StrokeThickness = 1;
+            Children.Add(line);
+            SizeChanged += (s, e) => Draw();
+            line.Stroke = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        }
+        public void Push(double db) {
+            vals[head] = (float)Math.Max(0, Math.Min(1, (db - (-60)) / 60.0));
+            head = (head + 1) % N;
+            if (count < N) count++;
+            Draw();
+        }
+        void Draw() {
+            double w = ActualWidth, h = ActualHeight;
+            if (w < 40 || h < 4 || count < 2) { line.Points = new PointCollection(); return; }
+            var pts = new PointCollection();
+            for (int i = 0; i < count; i++) {
+                int idx = (head - count + i + N) % N;
+                pts.Add(new Windows.Foundation.Point(i * w / (N - 1), h - vals[idx] * (h - 1) - 0.5));
+            }
+            line.Points = pts;
         }
     }
 

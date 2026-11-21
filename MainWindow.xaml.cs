@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -36,6 +37,22 @@ namespace MotuUI {
         bool srcOn, llOn;
         int reopens;
         bool loading;
+        // loopback / on-air state
+        bool loopMuted, recOn;
+        string loopEpName = "";
+        ManualResetEventSlim recStop;
+        DateTime recStart;
+        long loopMs = -1;
+        int ticks, outHot, loopDead;
+        AirSpark airHistory;
+        readonly List<AirRow> airRows = new List<AirRow>();
+        AirRow[] airSnapshot = new AirRow[0];
+        readonly Dictionary<string, double> airDb = new Dictionary<string, double>();
+
+        class AirRow {
+            public string Key; public Wasapi.AirSession S;
+            public MiniBar Bar; public TextBlock Db, Name; public FontIcon Icon;
+        }
         Preset[] presets;
         static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
 
@@ -48,14 +65,16 @@ namespace MotuUI {
             MeterOut = new LedMeter(); MeterOutHost.Children.Add(MeterOut);
             MeterLoop = new LedMeter(); MeterLoopHost.Children.Add(MeterLoop);
             ScaleHost.Children.Add(new DbScale());
+            airHistory = new AirSpark(); AirHistoryHost.Children.Add(airHistory);
+            ToolTipService.SetToolTip(LoopNote, "playback→loopback delay measured by the last test tone");
             Title = "MOTU";
             try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "motu.ico")); } catch {}
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(680, 540));
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(680, 640));
             var pres = AppWindow.Presenter as OverlappedPresenter;
             var root = (FrameworkElement)Content;
             root.Loaded += (s, e) => {
                 var rs = root.XamlRoot.RasterizationScale;
-                AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)(540 * rs)));
+                AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)(640 * rs)));
                 if (pres != null) { pres.PreferredMinimumWidth = (int)(560 * rs); pres.PreferredMinimumHeight = (int)(440 * rs); }
                 ApplyTitleBarTheme(root.ActualTheme);
             };
@@ -70,7 +89,8 @@ namespace MotuUI {
 
             cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
             cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
-            cloop = Wasapi.OpenLoopback(out chLoop);
+            cloop = Wasapi.OpenLoopback(out chLoop, out _, out loopEpName);
+            loopMuted = Wasapi.GetLoopMuted();
             ToolTipService.SetToolTip(MeterInHost,
                 chIn > 2 ? chIn + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
             ToolTipService.SetToolTip(MeterOutHost,
@@ -99,6 +119,16 @@ namespace MotuUI {
             MeterIn.Tapped += (s, e) => clipIn = false;
             MeterOut.Tapped += (s, e) => clipOut = false;
             MeterLoop.Tapped += (s, e) => clipLoop = false;
+            BtnLoopMute.Click += (s, e) => {
+                Task.Run(() => {
+                    Wasapi.SetLoopMuted(!Wasapi.GetLoopMuted());
+                    var m = Wasapi.GetLoopMuted();
+                    RunOnUI(() => { loopMuted = m; PaintLoopState(); });
+                });
+            };
+            BtnLoopRec.Click += (s, e) => ToggleRec();
+            PaintLoopState();
+            StartAirPoller();
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += Tick;
@@ -291,12 +321,36 @@ namespace MotuUI {
             if (testing) return;
             testing = true;
             Task.Run(() => {
-                IAudioClient ac = null; IAudioRenderClient rc = null;
+                IAudioClient ac = null; IAudioRenderClient rc = null; IAudioCaptureClient lc = null;
                 try {
-                    int ch, rate;
+                    int ch, rate, lch;
                     rc = Wasapi.OpenRender(out ac, out ch, out rate);
-                    if (rc != null) Wasapi.Tone(ac, rc, ch, rate, 1.5);
+                    lc = Wasapi.OpenLoopback(out lch);
+                    // drain stale packets so the first signal we see is this tone's
+                    if (lc != null) {
+                        uint fr; IntPtr p; int fl; ulong pos, qpc;
+                        while (lc.GetNextPacketSize(out fr) == 0 && fr > 0) {
+                            if (lc.GetBuffer(out p, out fr, out fl, out pos, out qpc) != 0) break;
+                            lc.ReleaseBuffer(fr);
+                        }
+                    }
+                    var tone = Task.Run(() => {
+                        if (rc != null) Wasapi.Tone(ac, rc, ch, rate, 1.5);
+                    });
+                    if (lc != null) {
+                        var sw = Stopwatch.StartNew();
+                        while (!tone.IsCompleted && sw.ElapsedMilliseconds < 4000) {
+                            double l, r;
+                            if (Wasapi.Peak2(lc, lch, out l, out r) && Math.Max(l, r) > -30) {
+                                RunOnUI(() => loopMs = sw.ElapsedMilliseconds);
+                                break;
+                            }
+                            Thread.Sleep(5);
+                        }
+                    }
+                    tone.Wait();
                 } catch {} finally {
+                    if (lc != null) Marshal.ReleaseComObject(lc);
                     if (rc != null) Marshal.ReleaseComObject(rc);
                     if (ac != null) Marshal.ReleaseComObject(ac);
                     testing = false;
@@ -313,9 +367,176 @@ namespace MotuUI {
             try {
                 cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
                 cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
-                cloop = Wasapi.OpenLoopback(out chLoop);
+                cloop = Wasapi.OpenLoopback(out chLoop, out _, out loopEpName);
+                loopMuted = Wasapi.GetLoopMuted();
             } catch {}
+            PaintLoopState();
             timer.Start();
+        }
+
+        static readonly Microsoft.UI.Xaml.Media.SolidColorBrush RedBrush =
+            new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 230, 70, 58));
+
+        void PaintLoopState() {
+            MixBadge.Visibility = loopEpName != null && loopEpName.Contains("Mix")
+                ? Visibility.Visible : Visibility.Collapsed;
+            LoopMuteIcon.Glyph = loopMuted ? "\uE74F" : "\uE767";
+            LoopMuteIcon.Foreground = loopMuted
+                ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
+                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+            BtnLoopMute.IsEnabled = BtnLoopRec.IsEnabled = cloop != null;
+        }
+
+        // Session + mute enumeration runs on a worker — a wedged endpoint must not freeze the UI.
+        bool sessBusy;
+        void RefreshSessions() {
+            if (sessBusy) return;
+            sessBusy = true;
+            Task.Run(() => {
+                List<Wasapi.AirSession> list = null; bool m = false; bool mok = false;
+                try { list = Wasapi.AirSessions(); m = Wasapi.GetLoopMuted(); mok = true; } catch {}
+                RunOnUI(() => {
+                    sessBusy = false;
+                    if (mok) {
+                        bool wasMuted = loopMuted;
+                        loopMuted = m;
+                        if (loopMuted != wasMuted) PaintLoopState();
+                    }
+                    if (list != null) ApplySessions(list);
+                });
+            });
+        }
+
+        void ApplySessions(List<Wasapi.AirSession> list) {
+            bool same = list.Count == airRows.Count;
+            for (int i = 0; same && i < list.Count; i++)
+                if (list[i].Id != airRows[i].Key) same = false;
+            if (!same) {
+                airRows.Clear();
+                AirSessions.Children.Clear();
+                if (list.Count == 0)
+                    AirSessions.Children.Add(new TextBlock {
+                        Text = "nothing is playing into the bus", FontSize = 11,
+                        Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                    });
+                foreach (var s in list) airRows.Add(MakeRow(s));
+            }
+            foreach (var r in airRows) {
+                r.S = list.Find(x => x.Id == r.Key) ?? r.S;
+                PaintRow(r);
+            }
+            airSnapshot = airRows.ToArray();
+        }
+
+        // Peak polling off the UI thread — a stuck session can't freeze the window.
+        void StartAirPoller() {
+            Task.Run(() => {
+                var local = new Dictionary<string, double>();
+                while (true) {
+                    var rows = airSnapshot;
+                    local.Clear();
+                    foreach (var r in rows) {
+                        double db = -100;
+                        try {
+                            var s = r.S;
+                            if (s != null) {
+                                float p = Wasapi.SessionPeak(s);
+                                db = p <= 0 ? -100 : 20 * Math.Log10(p);
+                            }
+                        } catch {}
+                        local[r.Key] = db;
+                    }
+                    RunOnUI(() => {
+                        foreach (var r in airSnapshot) {
+                            double db;
+                            if (!local.TryGetValue(r.Key, out db)) continue;
+                            r.Bar.SetDb(db);
+                            r.Db.Text = db <= -60 ? "-∞" : db.ToString(" 0.0;-0.0");
+                        }
+                    });
+                    Thread.Sleep(120);
+                }
+            });
+        }
+
+        AirRow MakeRow(Wasapi.AirSession s) {
+            var r = new AirRow { Key = s.Id, S = s };
+            r.Name = new TextBlock {
+                FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            r.Bar = new MiniBar { Height = 6, VerticalAlignment = VerticalAlignment.Center };
+            r.Db = new TextBlock {
+                FontSize = 10, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Cascadia Mono, Consolas"),
+                TextAlignment = TextAlignment.Right, Width = 56, VerticalAlignment = VerticalAlignment.Center,
+            };
+            r.Icon = new FontIcon { Glyph = "\uE767", FontSize = 11 };
+            var btn = new Button {
+                Width = 26, Height = 22, Padding = new Thickness(0), Content = r.Icon,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.Transparent),
+                BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
+            };
+            ToolTipService.SetToolTip(btn, "mute this app on the stream only — you still hear it locally");
+            var row = r;
+            btn.Click += (bs, be) => {
+                var s = row.S;
+                if (s == null) return;
+                var m = !s.Muted;
+                Task.Run(() => Wasapi.SessionSetMute(s, m));
+                s.Muted = m;
+                PaintRow(row);
+            };
+            var g = new Grid { ColumnSpacing = 8 };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.Children.Add(r.Name);
+            Grid.SetColumn(r.Bar, 1); g.Children.Add(r.Bar);
+            Grid.SetColumn(r.Db, 2); g.Children.Add(r.Db);
+            Grid.SetColumn(btn, 3); g.Children.Add(btn);
+            AirSessions.Children.Add(g);
+            PaintRow(r);
+            return r;
+        }
+
+        void PaintRow(AirRow r) {
+            var res = Application.Current.Resources;
+            r.Name.Text = r.S?.Name ?? "";
+            bool act = r.S?.Active ?? false, mut = r.S?.Muted ?? false;
+            r.Name.Foreground = (Microsoft.UI.Xaml.Media.Brush)res[act ? "TextFillColorPrimaryBrush" : "TextFillColorTertiaryBrush"];
+            r.Db.Foreground = (Microsoft.UI.Xaml.Media.Brush)res["TextFillColorTertiaryBrush"];
+            r.Icon.Glyph = mut ? "\uE74F" : "\uE767";
+            r.Icon.Foreground = mut ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
+                : (Microsoft.UI.Xaml.Media.Brush)res["TextFillColorTertiaryBrush"];
+        }
+
+        void ToggleRec() {
+            if (cloop == null) return;
+            if (recOn) { recStop.Set(); return; }
+            recStop = new ManualResetEventSlim();
+            recStart = DateTime.UtcNow;
+            recOn = true;
+            var dir = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+            if (string.IsNullOrEmpty(dir)) dir = AppContext.BaseDirectory;
+            var path = Path.Combine(dir, "motu-loop-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".wav");
+            Task.Run(() => {
+                string err = null;
+                try { Wasapi.RecordLoop(path, recStop); } catch (Exception ex) { err = ex.Message; }
+                RunOnUI(async () => {
+                    recOn = false;
+                    if (err != null) await Info("Loop record", "Failed: " + err);
+                    else {
+                        var d = new ContentDialog {
+                            Title = "Loop recorded", Content = path,
+                            PrimaryButtonText = "Show in folder", CloseButtonText = "OK",
+                            XamlRoot = Content.XamlRoot,
+                        };
+                        if (await d.ShowAsync() == ContentDialogResult.Primary)
+                            Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                    }
+                });
+            });
         }
 
         void Tick(object s, object e) {
@@ -352,6 +573,24 @@ namespace MotuUI {
             DbIn.Text = mxI <= -60 ? "-∞" : mxI.ToString(" 0.0;-0.0") + "dB";
             DbOut.Text = mxO <= -60 ? "-∞" : mxO.ToString(" 0.0;-0.0") + "dB";
             DbLoop.Text = cloop == null ? "—" : (mxL <= -60 ? "-∞" : mxL.ToString(" 0.0;-0.0") + "dB");
+
+            // ON AIR card: history strip, per-app meters, silence watchdog, status line.
+            ticks++;
+            if (ticks % 5 == 0) airHistory.Push(mxL);
+            if (ticks % 20 == 0) RefreshSessions();
+            if (mxO > -30) outHot++; else outHot = 0;
+            if (mxL <= -55) loopDead++; else loopDead = 0;
+            LoopWarn.Visibility = !loopMuted && cloop != null && outHot > 60 && loopDead > 60
+                ? Visibility.Visible : Visibility.Collapsed;
+            string note;
+            if (cloop == null) note = "no loopback endpoint";
+            else if (recOn) { var el = DateTime.UtcNow - recStart; note = "rec " + (int)el.TotalMinutes + ":" + el.Seconds.ToString("00"); }
+            else if (loopMuted) note = "muted";
+            else if (loopMs >= 0) note = "≈ " + loopMs + " ms";
+            else note = "";
+            if (LoopNote.Text != note) LoopNote.Text = note;
+            LoopNote.Foreground = recOn || loopMuted ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
+                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         }
 
         static double Peak(double v, ref double pk, ref int hold) {

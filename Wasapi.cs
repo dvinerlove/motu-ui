@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace MotuUI {
@@ -47,6 +49,66 @@ namespace MotuUI {
         int GetBuffer(uint frames, out IntPtr data);
         int ReleaseBuffer(uint frames, int flags);
     }
+    // IAudioEndpointVolume — only the head of the vtable we need (through GetMute).
+    [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioEndpointVolume {
+        int RegisterControlChangeNotify(IntPtr c);
+        int UnregisterControlChangeNotify(IntPtr c);
+        int GetChannelCount(out uint n);
+        int SetMasterVolumeLevel(float db, IntPtr g);
+        int SetMasterVolumeLevelScalar(float v, IntPtr g);
+        int GetMasterVolumeLevel(out float db);
+        int GetMasterVolumeLevelScalar(out float v);
+        int SetChannelVolumeLevel(uint ch, float db, IntPtr g);
+        int SetChannelVolumeLevelScalar(uint ch, float v, IntPtr g);
+        int GetChannelVolumeLevel(uint ch, out float db);
+        int GetChannelVolumeLevelScalar(uint ch, out float v);
+        int SetMute(int mute, IntPtr g);
+        int GetMute(out int mute);
+    }
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B34"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionManager2 {
+        int GetAudioSessionControl(IntPtr g, uint flags, [MarshalAs(UnmanagedType.Interface)] out object s);
+        int GetSimpleAudioVolume(IntPtr g, uint flags, [MarshalAs(UnmanagedType.Interface)] out object s);
+        int GetSessionEnumerator(out IAudioSessionEnumerator e);
+    }
+    [ComImport, Guid("E2F5DC11-5719-4B24-9CD4-7563A35F6568"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionEnumerator {
+        int GetCount(out int n);
+        int GetSession(int i, [MarshalAs(UnmanagedType.Interface)] out object s);
+    }
+    // vtable = IAudioSessionControl (9 methods) + IAudioSessionControl2 (5 methods).
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2 {
+        int GetState(out int state);
+        int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+        int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, IntPtr g);
+        int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string path);
+        int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, IntPtr g);
+        int GetGroupingParam(out Guid g);
+        int SetGroupingParam(IntPtr g, IntPtr o);
+        int RegisterAudioSessionNotification(IntPtr n);
+        int UnregisterAudioSessionNotification(IntPtr n);
+        int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+        int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+        int GetProcessId(out uint pid);
+        int IsSystemSoundsSession();
+        int SetDuckingPreference(int opt);
+    }
+    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface ISimpleAudioVolume {
+        int SetMasterVolume(float v, IntPtr g);
+        int GetMasterVolume(out float v);
+        int SetMute(int mute, IntPtr g);
+        int GetMute(out int mute);
+    }
+    [ComImport, Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioMeterInformation {
+        int GetPeakValue(out float peak);
+        int GetMeteringChannelCount(out uint n);
+        int GetChannelsPeakValues(uint n, float[] vals);
+        int QueryHardwareSupport(out uint mask);
+    }
 
     static class Wasapi {
         static readonly Guid IID_IAudioClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
@@ -65,7 +127,7 @@ namespace MotuUI {
         public static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels) {
             // Capture endpoints carry channel-pair names ("In 1-2", "Loopback",
             // "Loopback Mix"); prefer the physical inputs, avoid virtual ones.
-            return OpenCapture(flow, out channels,
+            return OpenCapture(flow, out channels, out _, out _,
                 flow == EDataFlow.eCapture ? "In " : null,
                 flow == EDataFlow.eCapture ? "Loopback" : null);
         }
@@ -121,39 +183,210 @@ namespace MotuUI {
         }
 
         // The Loopback capture endpoint = playback audio as recorders hear it.
+        // "Loopback Mix" adds the live inputs — flagged via epName so the UI can warn.
         public static IAudioCaptureClient OpenLoopback(out int channels) {
-            var cc = OpenCapture(EDataFlow.eCapture, out channels, "Loopback", "Mix");
-            if (cc == null) cc = OpenCapture(EDataFlow.eCapture, out channels, "Loopback", null);
+            return OpenLoopback(out channels, out _, out _);
+        }
+
+        public static IAudioCaptureClient OpenLoopback(out int channels, out int rate, out string epName) {
+            var cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", "Mix");
+            if (cc == null) cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", null);
             return cc;
         }
 
-        static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, string prefer, string avoid) {
-            channels = 2;
-            var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
-            IMMDeviceCollection coll;
-            if (e.EnumAudioEndpoints(flow, 1, out coll) != 0) return null;
-            uint n; coll.GetCount(out n);
-            IMMDevice first = null;
-            for (uint i = 0; i < n; i++) {
-                IMMDevice d; coll.Item(i, out d);
-                var nm = FriendlyName(d);
-                if (!nm.Contains("MOTU")) continue;
-                if (avoid != null && nm.Contains(avoid)) continue;
-                if (prefer != null && nm.StartsWith(prefer)) { first = d; break; }
-                if (first == null) first = d;
-            }
-            if (first == null) return null;
+        static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, out int rate, out string epName, string prefer, string avoid) {
+            channels = 2; rate = 48000; epName = "";
+            var d = FindEndpoint(flow, out epName, prefer, avoid);
+            if (d == null) return null;
             object o;
-            if (first.Activate(IID_IAudioClient, 0x17, IntPtr.Zero, out o) != 0) return null;
+            if (d.Activate(IID_IAudioClient, 0x17, IntPtr.Zero, out o) != 0) return null;
             var ac = (IAudioClient)o;
             IntPtr pf; if (ac.GetMixFormat(out pf) != 0) return null;
             int ch = Marshal.ReadInt16(pf, 2); // WAVEFORMATEX.nChannels
             if (ch >= 1) channels = ch;
+            int r = Marshal.ReadInt32(pf, 4);  // nSamplesPerSec
+            if (r > 0) rate = r;
             int flags = (flow == EDataFlow.eRender) ? 0x00020000 : 0;
             if (ac.Initialize(0, flags, 0, 0, pf, IntPtr.Zero) != 0) return null;
             object cc; if (ac.GetService(IID_IAudioCaptureClient, out cc) != 0) return null;
             ac.Start();
             return (IAudioCaptureClient)cc;
+        }
+
+        static readonly Guid IID_IAudioEndpointVolume = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+        static readonly Guid IID_IAudioSessionManager2 = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B34");
+
+        // First MOTU endpoint whose name passes prefer/avoid, or null.
+        static IMMDevice FindEndpoint(EDataFlow flow, out string epName, string prefer, string avoid) {
+            epName = "";
+            var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
+            IMMDeviceCollection coll;
+            if (e.EnumAudioEndpoints(flow, 1, out coll) != 0) return null;
+            uint n; coll.GetCount(out n);
+            IMMDevice first = null; string firstName = "";
+            for (uint i = 0; i < n; i++) {
+                IMMDevice d; coll.Item(i, out d);
+                var nm = FriendlyName(d);
+                if (!nm.Contains("MOTU")) continue;
+                if (avoid != null && nm.Contains(avoid)) continue;
+                if (prefer != null && nm.StartsWith(prefer)) { first = d; firstName = nm; break; }
+                if (first == null) { first = d; firstName = nm; }
+            }
+            epName = firstName;
+            return first;
+        }
+
+        static IMMDevice FindLoopbackDevice() {
+            var d = FindEndpoint(EDataFlow.eCapture, out _, "Loopback", "Mix");
+            return d ?? FindEndpoint(EDataFlow.eCapture, out _, "Loopback", null);
+        }
+
+        // Master mute on the Loopback capture endpoint — silences what recorders hear.
+        public static bool GetLoopMuted() {
+            var d = FindLoopbackDevice();
+            if (d == null) return false;
+            object o;
+            if (d.Activate(IID_IAudioEndpointVolume, 0x17, IntPtr.Zero, out o) != 0) return false;
+            int m; return ((IAudioEndpointVolume)o).GetMute(out m) == 0 && m != 0;
+        }
+
+        public static bool SetLoopMuted(bool mute) {
+            var d = FindLoopbackDevice();
+            if (d == null) return false;
+            object o;
+            if (d.Activate(IID_IAudioEndpointVolume, 0x17, IntPtr.Zero, out o) != 0) return false;
+            return ((IAudioEndpointVolume)o).SetMute(mute ? 1 : 0, IntPtr.Zero) == 0;
+        }
+
+        // Apps with a session on a MOTU render endpoint = what's feeding the loopback bus.
+        public sealed class AirSession {
+            public string Id;       // session instance id — stable key across re-enumerations
+            public string Name;
+            public bool Muted;
+            public bool Active;
+            internal object Ctl;    // IAudioSessionControl — QI'd for meter/volume
+        }
+
+        public static System.Collections.Generic.List<AirSession> AirSessions() {
+            var list = new System.Collections.Generic.List<AirSession>();
+            var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
+            IMMDeviceCollection coll;
+            if (e.EnumAudioEndpoints(EDataFlow.eRender, 1, out coll) != 0) return list;
+            uint n; coll.GetCount(out n);
+            for (uint i = 0; i < n; i++) {
+                IMMDevice d; coll.Item(i, out d);
+                if (!FriendlyName(d).Contains("MOTU")) continue;
+                object o;
+                if (d.Activate(IID_IAudioSessionManager2, 0x17, IntPtr.Zero, out o) != 0) continue;
+                IAudioSessionEnumerator en;
+                if (((IAudioSessionManager2)o).GetSessionEnumerator(out en) != 0) continue;
+                int cnt; if (en.GetCount(out cnt) != 0) continue;
+                for (int j = 0; j < cnt; j++) {
+                    object s;
+                    if (en.GetSession(j, out s) != 0 || s == null) continue;
+                    var c2 = s as IAudioSessionControl2;
+                    if (c2 == null) continue;
+                    var sess = new AirSession { Ctl = s, Name = "app" };
+                    c2.GetSessionInstanceIdentifier(out sess.Id);
+                    int st; c2.GetState(out st);
+                    if (st == 2) continue; // expired
+                    sess.Active = st == 1;
+                    uint pid; string dn;
+                    c2.GetDisplayName(out dn);
+                    if (c2.IsSystemSoundsSession() == 0) sess.Name = "system sounds";
+                    else if (!string.IsNullOrEmpty(dn)) sess.Name = dn;
+                    else if (c2.GetProcessId(out pid) == 0 && pid != 0) sess.Name = ProcName(pid);
+                    var vol = s as ISimpleAudioVolume;
+                    if (vol != null) { int m; sess.Muted = vol.GetMute(out m) == 0 && m != 0; }
+                    if (sess.Id == null) sess.Id = sess.Name + j;
+                    list.Add(sess);
+                }
+            }
+            return list;
+        }
+
+        static string ProcName(uint pid) {
+            try {
+                var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                string d = null;
+                try { d = p.MainModule?.FileVersionInfo?.FileDescription; } catch {}
+                return string.IsNullOrEmpty(d) ? p.ProcessName : d;
+            } catch { return "pid " + pid; }
+        }
+
+        public static float SessionPeak(AirSession s) {
+            var m = s?.Ctl as IAudioMeterInformation;
+            if (m == null) return 0;
+            float p; return m.GetPeakValue(out p) == 0 ? p : 0;
+        }
+
+        public static void SessionSetMute(AirSession s, bool mute) {
+            (s?.Ctl as ISimpleAudioVolume)?.SetMute(mute ? 1 : 0, IntPtr.Zero);
+        }
+
+        // Blocking WAV recorder on the Loopback endpoint — call from a worker thread.
+        // Writes 16-bit PCM (float mix format converted); patches the header on stop.
+        public static void RecordLoop(string path, ManualResetEventSlim stop) {
+            int ch, rate;
+            var cc = OpenLoopback(out ch, out rate, out _);
+            if (cc == null) throw new InvalidOperationException("no loopback endpoint");
+            using (var w = new WavWriter(path, ch, rate)) {
+                while (!stop.IsSet) {
+                    uint fr; IntPtr p; int fl; ulong pos, qpc;
+                    if (cc.GetNextPacketSize(out fr) != 0 || fr == 0) { Thread.Sleep(5); continue; }
+                    int guard = 0;
+                    while (guard++ < 64 && cc.GetBuffer(out p, out fr, out fl, out pos, out qpc) == 0) {
+                        if (fr > 0 && (fl & 1) == 0) w.Write(p, fr);
+                        cc.ReleaseBuffer(fr);
+                    }
+                    Thread.Sleep(2); // a wedged GetBuffer must not spin at 100% CPU
+                }
+            }
+            Marshal.ReleaseComObject(cc);
+        }
+
+        sealed unsafe class WavWriter : IDisposable {
+            readonly FileStream fs; readonly int ch;
+            uint dataBytes;
+            public WavWriter(string path, int channels, int rate) {
+                ch = channels;
+                fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+                var bw = new BinaryWriter(fs, Encoding.ASCII, true);
+                bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                bw.Write(0u);                       // patched on close
+                bw.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
+                bw.Write(16u);
+                bw.Write((ushort)1);                // PCM
+                bw.Write((ushort)ch);
+                bw.Write((uint)rate);
+                bw.Write((uint)(rate * ch * 2));
+                bw.Write((ushort)(ch * 2));
+                bw.Write((ushort)16);
+                bw.Write(Encoding.ASCII.GetBytes("data"));
+                bw.Write(0u);                       // patched on close
+                bw.Flush();
+            }
+            public void Write(IntPtr data, uint frames) {
+                float* f = (float*)data;
+                uint n = frames * (uint)ch;
+                var buf = new byte[n * 2];
+                fixed (byte* bp = buf) {
+                    short* s = (short*)bp;
+                    for (uint i = 0; i < n; i++) {
+                        float v = f[i] * 32767f;
+                        s[i] = (short)Math.Max(-32768, Math.Min(32767, (int)v));
+                    }
+                }
+                fs.Write(buf, 0, buf.Length);
+                dataBytes += (uint)buf.Length;
+            }
+            public void Dispose() {
+                fs.Seek(4, SeekOrigin.Begin);
+                fs.Write(BitConverter.GetBytes(36u + dataBytes), 0, 4);
+                fs.Seek(40, SeekOrigin.Begin);
+                fs.Write(BitConverter.GetBytes(dataBytes), 0, 4);
+                fs.Dispose();
+            }
         }
 
         public static unsafe bool Peak2(IAudioCaptureClient cc, out double pl, out double pr) {
