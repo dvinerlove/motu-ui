@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -12,21 +13,39 @@ namespace MotuUI {
             // a process with no window looks like a failed launch (users click again).
             _window = new MainWindow();
             _window.Closed += (s, e) => {
-                // MSeriesFree can wedge inside the driver — never block exit on it.
-                Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
+                // Free on the driver thread (affinity); it's background — no exit delay.
+                MOTU.Post(() => { try { MOTU.MSeriesFree(); } catch {} });
             };
             _window.Activate();
-            Task.Run(() => {
+            int retry = 0;
+            var a = args.Arguments ?? "";
+            int ri = a.IndexOf("--retry ");
+            if (ri >= 0) int.TryParse(a.Substring(ri + 8).Split(' ')[0], out retry);
+            // Probe on the shared driver thread — MSeriesLib binds to it.
+            MOTU.Post(() => {
+                // A recently-closed client leaves the driver refusing new init calls for
+                // a while; a failed init is sticky in-process, so recovery means a fresh
+                // process — relaunch ourselves a few times with a pause instead.
+                if (retry > 0) Thread.Sleep(15000);
                 int r = MOTU.MSeriesInit();
                 uint d = 0;
-                for (int i = 0; r == 0 && i < 20; i++) {
+                for (int j = 0; r == 0 && j < 20; j++) {
                     r = MOTU.MSeriesGetDevice(0, out d);
                     if (r == 0) break;
                     Thread.Sleep(300);
                 }
                 if (r != 0) {
-                    Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
-                    q.TryEnqueue(() => ((MainWindow)_window).NoDevice());
+                    try { MOTU.MSeriesFree(); } catch {}
+                    if (retry < 4) {
+                        try {
+                            Process.Start(new ProcessStartInfo(
+                                Process.GetCurrentProcess().MainModule.FileName,
+                                "--retry " + (retry + 1)) { UseShellExecute = true });
+                        } catch {}
+                        q.TryEnqueue(() => Current.Exit());
+                    } else {
+                        q.TryEnqueue(() => ((MainWindow)_window).NoDevice());
+                    }
                     return;
                 }
                 MainWindow.SetDevice(d);

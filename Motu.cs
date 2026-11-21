@@ -5,7 +5,22 @@ namespace MotuUI {
     static class MOTU {
         const string DIR = @"C:\Program Files (x86)\MOTU\CoreUAC";
         [DllImport("kernel32", SetLastError = true)] static extern bool SetDllDirectory(string p);
-        static MOTU() { SetDllDirectory(DIR); }
+
+        // MSeriesLib binds to the thread that first calls into it — calls from
+        // random pool threads flake or wedge. Every library call goes through
+        // this one dedicated thread, started with the class.
+        static readonly System.Collections.Concurrent.BlockingCollection<Action> _q =
+            new System.Collections.Concurrent.BlockingCollection<Action>();
+        static MOTU() {
+            SetDllDirectory(DIR);
+            var t = new System.Threading.Thread(() => {
+                foreach (var a in _q.GetConsumingEnumerable()) { try { a(); } catch {} }
+            });
+            t.IsBackground = true;
+            t.Name = "mseries";
+            t.Start();
+        }
+        public static void Post(Action a) { _q.Add(a); }
 
         [DllImport("MSeriesLib.dll", CallingConvention = CallingConvention.StdCall)] public static extern int MSeriesInit();
         [DllImport("MSeriesLib.dll", CallingConvention = CallingConvention.StdCall)] public static extern int MSeriesFree();

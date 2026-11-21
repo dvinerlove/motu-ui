@@ -59,7 +59,9 @@ namespace MotuUI {
             public MiniBar Bar; public TextBlock Db, Name; public FontIcon Icon;
         }
         Preset[] presets;
+        bool expOn;
         static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
+        static readonly string CfgPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-cfg.txt");
 
         static string Str(byte[] b) { var s = Encoding.ASCII.GetString(b); int z = s.IndexOf('\0'); return z < 0 ? s : s.Substring(0, z); }
 
@@ -108,6 +110,13 @@ namespace MotuUI {
             };
             SrcSwitch.Click += (s, e) => Drv(() => MOTU.MSeriesSetWaveSRCEnabled(dev, srcOn ? 0u : 1u));
             LlSwitch.Click += (s, e) => Drv(() => { MOTU.MSeriesEnableLowLatencyMode(dev, !llOn); llOn = !llOn; });
+            ExpSwitch.Click += (s, e) => {
+                expOn = !expOn;
+                try { File.WriteAllText(CfgPath, expOn ? "1" : "0"); } catch {}
+                PaintExp();
+            };
+            try { expOn = File.ReadAllText(CfgPath).Trim() == "1"; } catch {}
+            PaintExp();
             LoadPresets();
             BtnRec.Click += (s, e) => ApplyPreset(0);
             BtnStream.Click += (s, e) => ApplyPreset(1);
@@ -195,14 +204,15 @@ namespace MotuUI {
             });
         }
 
-        // Driver writes run on a worker so a wedged IOCTL can't freeze the window.
-        // Extra clicks while a write is in flight are dropped; the refresh at the end
-        // syncs LEDs/boxes back to the real device state.
+        // Driver writes run on the shared driver thread (MSeriesLib is
+        // thread-affine) so a wedged IOCTL can't freeze the window. Extra clicks
+        // while a write is in flight are dropped; the refresh at the end syncs
+        // LEDs/boxes back to the real device state.
         bool drvBusy;
         void Drv(Action call) {
             if (drvBusy || dev == 0) return;
             drvBusy = true;
-            Task.Run(() => {
+            MOTU.Post(() => {
                 try { call(); RefreshState(); } catch {}
                 RunOnUI(() => { drvBusy = false; loading = false; needReopen = true; Pulse(); });
             });
@@ -211,6 +221,11 @@ namespace MotuUI {
         void SyncLeds() {
             Led(SrcDot, SrcState, srcOn);
             Led(LlDot, LlState, llOn);
+        }
+
+        void PaintExp() {
+            Led(ExpDot, ExpState, expOn);
+            OnAirCard.Visibility = expOn ? Visibility.Visible : Visibility.Collapsed;
         }
 
         static readonly Microsoft.UI.Xaml.Media.SolidColorBrush On =
