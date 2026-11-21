@@ -36,7 +36,7 @@
     <Program_Name>motu-ui</Program_Name>
     <Program_Version>1.1.0</Program_Version>
     <Program_Release_Month>11</Program_Release_Month>
-    <Program_Release_Day>21</Program_Release_Day>
+    <Program_Release_Day>22</Program_Release_Day>
     <Program_Release_Year>2026</Program_Release_Year>
     <Program_Cost_Dollars>0</Program_Cost_Dollars>
     <Program_Cost_Other_Code></Program_Cost_Other_Code>
@@ -46,13 +46,13 @@
     <Program_Install_Support>Install and Uninstall</Program_Install_Support>
     <Program_OS_Support>Win10,Win11</Program_OS_Support>
     <Program_Language>English</Program_Language>
-    <Program_Change_Info></Program_Change_Info>
+    <Program_Change_Info>Loopback bus level and mute; experimental ON AIR card with per-app loopback list; SYNC RATE toggle matching the stock panel; transient driver sessions so the stock panel works alongside</Program_Change_Info>
     <Program_Specific_Category>Utilities</Program_Specific_Category>
     <Program_Categories>Audio &amp; Multimedia::Audio Tools</Program_Categories>
     <Program_System_Requirements>Windows 10 1809+, MOTU M2/M4/M6 audio interface, official MOTU driver installed</Program_System_Requirements>
     <File_Info>
-      <File_Size_Bytes>34603008</File_Size_Bytes>
-      <File_Size_K>33792</File_Size_K>
+      <File_Size_Bytes>34140484</File_Size_Bytes>
+      <File_Size_K>33340</File_Size_K>
       <File_Size_MB>33</File_Size_MB>
     </File_Info>
     <Expire_Info>
@@ -70,13 +70,14 @@
       <Keywords>MOTU M2, MOTU M4, MOTU M6, audio interface, control panel, loopback, OBS, WASAPI, buffer size, sample rate, low latency, audio meter, streaming</Keywords>
       <Char_Desc_45>MOTU M-series control panel for Windows</Char_Desc_45>
       <Char_Desc_80>Control panel for MOTU M2/M4/M6 interfaces: live meters, loopback monitor</Char_Desc_80>
-      <Char_Desc_250>Small Windows utility for MOTU M2, M4 and M6 audio interfaces. Live input/output meters, loopback monitor showing what OBS hears, test tone, buffer size and sample rate control, low-latency mode, editable presets, driver update check.</Char_Desc_250>
-      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, puts every driver control (buffer size, sample rate, sample-rate sync, low-latency mode) in one compact window, and offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128). A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
+      <Char_Desc_250>Small Windows utility for MOTU M2, M4 and M6 audio interfaces. Live input/output meters, loopback monitor showing what OBS hears, bus level and per-app controls, test tone, buffer size and sample rate control, low-latency mode, editable presets, driver update check.</Char_Desc_250>
+      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, puts every driver control (buffer size, sample rate, sample-rate sync, low-latency mode) in one compact window, offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128), and an optional ON AIR card with a loopback bus fader, mute and per-app list. A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
       <Char_Desc_2000>motu-ui is a free, open-source (MIT) Windows control panel for MOTU M2, M4 and M6 USB audio interfaces, built for people who record, stream or monitor through their interface every day.
 
 motu-ui puts everything the stock panel has - plus live metering it doesn't - in one compact native window:
 - Live stereo level meters for IN and OUT with peak hold and clip indication
 - A third LOOP meter showing the loopback capture endpoint - exactly the signal OBS, Discord and other recorders receive
+- An optional ON AIR card (experimental) with a loopback bus fader, bus mute and a live list of the apps feeding the bus
 - A test-tone button that plays a 440 Hz signal through the device so the loopback path can be verified visually
 - Sample rate (44.1-192 kHz) and host buffer size (16-1024 samples) with a live latency readout
 - Sync rate and Low Latency toggles, plainly labeled with tooltips
