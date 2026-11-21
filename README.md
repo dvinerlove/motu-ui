@@ -1,5 +1,9 @@
 # motu-ui
 
+[![release](https://img.shields.io/github/v/release/dvinerlove/motu-ui)](https://github.com/dvinerlove/motu-ui/releases/latest)
+[![license](https://img.shields.io/github/license/dvinerlove/motu-ui)](LICENSE)
+[![downloads](https://img.shields.io/github/downloads/dvinerlove/motu-ui/total)](https://github.com/dvinerlove/motu-ui/releases)
+
 An unofficial open-source control panel for MOTU M2, M4, and M6 audio
 interfaces on Windows — with live meters, driver-level controls the stock
 panel hides, and editable presets.
@@ -8,7 +12,7 @@ It talks to the hardware through the official MOTU driver library, so nothing
 the device can't do is faked — the app just exposes more of it than the stock
 control panel does.
 
-![screenshot](docs/screenshot.png)
+![demo](docs/demo.gif)
 
 ## Download
 
