@@ -134,18 +134,9 @@
                         <TextBlock x:Name="LoopNote" VerticalAlignment="Center" FontSize="11"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Button x:Name="BtnLoopRec" Padding="10" MinWidth="32" MinHeight="28"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTipService.ToolTip="record the loopback bus to a WAV file — what your stream heard">
-                            <Button.Resources>
-                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
-                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
-                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
-                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
-                            </Button.Resources>
-                            <Ellipse x:Name="RecDot" Width="9" Height="9" Fill="#E6463A"/>
-                        </Button>
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Slider x:Name="LoopLevel" Width="84" Minimum="0" Maximum="100" StepFrequency="5"
+                                ToolTipService.ToolTip="bus level — how loud the stream hears this bus, independent of your headphone volume"/>
                         <Button x:Name="BtnLoopMute" Padding="10" MinWidth="32" MinHeight="28"
                                 Background="Transparent" BorderThickness="0"
                                 ToolTipService.ToolTip="mute the loopback bus — recorders hear nothing until you unmute">

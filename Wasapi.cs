@@ -258,6 +258,24 @@ namespace MotuUI {
             return ((IAudioEndpointVolume)o).SetMute(mute ? 1 : 0, IntPtr.Zero) == 0;
         }
 
+        // Recording level on the Loopback endpoint — how loud the bus is for recorders,
+        // independent of the monitor (playback) volume.
+        public static float GetLoopLevel() {
+            var d = FindLoopbackDevice();
+            if (d == null) return 1f;
+            object o;
+            if (d.Activate(IID_IAudioEndpointVolume, 0x17, IntPtr.Zero, out o) != 0) return 1f;
+            float v; return ((IAudioEndpointVolume)o).GetMasterVolumeLevelScalar(out v) == 0 ? v : 1f;
+        }
+
+        public static void SetLoopLevel(float v) {
+            var d = FindLoopbackDevice();
+            if (d == null) return;
+            object o;
+            if (d.Activate(IID_IAudioEndpointVolume, 0x17, IntPtr.Zero, out o) != 0) return;
+            ((IAudioEndpointVolume)o).SetMasterVolumeLevelScalar(v, IntPtr.Zero);
+        }
+
         // Apps with a session on a MOTU render endpoint = what's feeding the loopback bus.
         public sealed class AirSession {
             public string Id;       // session instance id — stable key across re-enumerations
@@ -322,71 +340,6 @@ namespace MotuUI {
 
         public static void SessionSetMute(AirSession s, bool mute) {
             (s?.Ctl as ISimpleAudioVolume)?.SetMute(mute ? 1 : 0, IntPtr.Zero);
-        }
-
-        // Blocking WAV recorder on the Loopback endpoint — call from a worker thread.
-        // Writes 16-bit PCM (float mix format converted); patches the header on stop.
-        public static void RecordLoop(string path, ManualResetEventSlim stop) {
-            int ch, rate;
-            var cc = OpenLoopback(out ch, out rate, out _);
-            if (cc == null) throw new InvalidOperationException("no loopback endpoint");
-            using (var w = new WavWriter(path, ch, rate)) {
-                while (!stop.IsSet) {
-                    uint fr; IntPtr p; int fl; ulong pos, qpc;
-                    if (cc.GetNextPacketSize(out fr) != 0 || fr == 0) { Thread.Sleep(5); continue; }
-                    int guard = 0;
-                    while (guard++ < 64 && cc.GetBuffer(out p, out fr, out fl, out pos, out qpc) == 0) {
-                        if (fr > 0 && (fl & 1) == 0) w.Write(p, fr);
-                        cc.ReleaseBuffer(fr);
-                    }
-                    Thread.Sleep(2); // a wedged GetBuffer must not spin at 100% CPU
-                }
-            }
-            Marshal.ReleaseComObject(cc);
-        }
-
-        sealed unsafe class WavWriter : IDisposable {
-            readonly FileStream fs; readonly int ch;
-            uint dataBytes;
-            public WavWriter(string path, int channels, int rate) {
-                ch = channels;
-                fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-                var bw = new BinaryWriter(fs, Encoding.ASCII, true);
-                bw.Write(Encoding.ASCII.GetBytes("RIFF"));
-                bw.Write(0u);                       // patched on close
-                bw.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
-                bw.Write(16u);
-                bw.Write((ushort)1);                // PCM
-                bw.Write((ushort)ch);
-                bw.Write((uint)rate);
-                bw.Write((uint)(rate * ch * 2));
-                bw.Write((ushort)(ch * 2));
-                bw.Write((ushort)16);
-                bw.Write(Encoding.ASCII.GetBytes("data"));
-                bw.Write(0u);                       // patched on close
-                bw.Flush();
-            }
-            public void Write(IntPtr data, uint frames) {
-                float* f = (float*)data;
-                uint n = frames * (uint)ch;
-                var buf = new byte[n * 2];
-                fixed (byte* bp = buf) {
-                    short* s = (short*)bp;
-                    for (uint i = 0; i < n; i++) {
-                        float v = f[i] * 32767f;
-                        s[i] = (short)Math.Max(-32768, Math.Min(32767, (int)v));
-                    }
-                }
-                fs.Write(buf, 0, buf.Length);
-                dataBytes += (uint)buf.Length;
-            }
-            public void Dispose() {
-                fs.Seek(4, SeekOrigin.Begin);
-                fs.Write(BitConverter.GetBytes(36u + dataBytes), 0, 4);
-                fs.Seek(40, SeekOrigin.Begin);
-                fs.Write(BitConverter.GetBytes(dataBytes), 0, 4);
-                fs.Dispose();
-            }
         }
 
         public static unsafe bool Peak2(IAudioCaptureClient cc, out double pl, out double pr) {

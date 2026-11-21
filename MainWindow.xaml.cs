@@ -37,10 +37,10 @@ namespace MotuUI {
         bool srcOn, llOn;
         bool loading;
         // loopback / on-air state
-        bool loopMuted, recOn;
+        bool loopMuted;
         string loopEpName = "";
-        ManualResetEventSlim recStop;
-        DateTime recStart;
+        volatile float loopLevelTarget = -1f; // -1 = untouched; worker applies endpoint-side
+        float loopLevelApplied = -1f;
         long loopMs = -1;
         int ticks, outHot, loopDead;
         AirSpark airHistory;
@@ -126,7 +126,7 @@ namespace MotuUI {
                     RunOnUI(() => { loopMuted = m; PaintLoopState(); });
                 });
             };
-            BtnLoopRec.Click += (s, e) => ToggleRec();
+            LoopLevel.ValueChanged += (s, e) => loopLevelTarget = (float)e.NewValue / 100f;
             PaintLoopState();
             StartAirPoller();
 
@@ -371,6 +371,10 @@ namespace MotuUI {
                         needReopen = false;
                         DoReopen();
                     }
+                    if (loopLevelTarget >= 0f && loopLevelTarget != loopLevelApplied) {
+                        Wasapi.SetLoopLevel(loopLevelTarget);
+                        loopLevelApplied = loopLevelTarget;
+                    }
                     double il, ir, ol, orr, ll, lr;
                     if (!Wasapi.Peak2(cin, chIn, out il, out ir)) { il = ir = -100; }
                     if (!Wasapi.Peak2(cout, chOut, out ol, out orr)) { ol = orr = -100; }
@@ -395,15 +399,19 @@ namespace MotuUI {
             cin = null; cout = null; cloop = null;
             string name = "";
             bool m = false;
+            float lv = 1f;
             try {
                 cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
                 cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
                 cloop = Wasapi.OpenLoopback(out chLoop, out _, out name);
                 m = Wasapi.GetLoopMuted();
+                lv = Wasapi.GetLoopLevel();
             } catch {}
             RunOnUI(() => {
                 loopEpName = name;
                 loopMuted = m;
+                loopLevelApplied = loopLevelTarget = lv;
+                LoopLevel.Value = lv * 100;
                 PaintLoopState();
                 ToolTipService.SetToolTip(MeterInHost,
                     chIn > 2 ? chIn + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
@@ -422,7 +430,7 @@ namespace MotuUI {
             LoopMuteIcon.Foreground = loopMuted
                 ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
-            BtnLoopMute.IsEnabled = BtnLoopRec.IsEnabled = cloop != null;
+            BtnLoopMute.IsEnabled = LoopLevel.IsEnabled = cloop != null;
         }
 
         // Session + mute enumeration runs on a worker — a wedged endpoint must not freeze the UI.
@@ -549,34 +557,6 @@ namespace MotuUI {
                 : (Microsoft.UI.Xaml.Media.Brush)res["TextFillColorTertiaryBrush"];
         }
 
-        void ToggleRec() {
-            if (cloop == null) return;
-            if (recOn) { recStop.Set(); return; }
-            recStop = new ManualResetEventSlim();
-            recStart = DateTime.UtcNow;
-            recOn = true;
-            var dir = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
-            if (string.IsNullOrEmpty(dir)) dir = AppContext.BaseDirectory;
-            var path = Path.Combine(dir, "motu-loop-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".wav");
-            Task.Run(() => {
-                string err = null;
-                try { Wasapi.RecordLoop(path, recStop); } catch (Exception ex) { err = ex.Message; }
-                RunOnUI(async () => {
-                    recOn = false;
-                    if (err != null) await Info("Loop record", "Failed: " + err);
-                    else {
-                        var d = new ContentDialog {
-                            Title = "Loop recorded", Content = path,
-                            PrimaryButtonText = "Show in folder", CloseButtonText = "OK",
-                            XamlRoot = Content.XamlRoot,
-                        };
-                        if (await d.ShowAsync() == ContentDialogResult.Primary)
-                            Process.Start("explorer.exe", "/select,\"" + path + "\"");
-                    }
-                });
-            });
-        }
-
         void Tick(object s, object e) {
             double il, ir, ol, orr, ll, lr; DateTime snapAt;
             lock (snapLock) { il = sIL; ir = sIR; ol = sOL; orr = sOR; ll = sLL; lr = sLR; snapAt = snapUtc; }
@@ -617,12 +597,11 @@ namespace MotuUI {
                 ? Visibility.Visible : Visibility.Collapsed;
             string note;
             if (cloop == null) note = stale ? "" : "no loopback endpoint";
-            else if (recOn) { var el = DateTime.UtcNow - recStart; note = "rec " + (int)el.TotalMinutes + ":" + el.Seconds.ToString("00"); }
             else if (loopMuted) note = "muted";
             else if (loopMs >= 0) note = "≈ " + loopMs + " ms";
             else note = "";
             if (LoopNote.Text != note) LoopNote.Text = note;
-            LoopNote.Foreground = recOn || loopMuted ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
+            LoopNote.Foreground = loopMuted ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         }
 

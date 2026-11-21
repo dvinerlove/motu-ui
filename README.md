@@ -26,9 +26,9 @@ no .NET needed. Unzip and run `motu-ui.exe`.
 - **Loopback meter** — a third ladder showing the loopback capture endpoint,
   i.e. exactly what OBS and other recorders hear, plus a 30-second history strip
 - **On-air app list** — every app feeding the loopback bus, with a live level
-  and a per-app mute that only affects the stream — you still hear it locally
-- **Loopback mute and recorder** — one click silences everything recorders
-  hear; another records the bus to a WAV file in your Music folder
+  and a per-app mute
+- **Bus level and mute** — a fader for how loud recorders hear the bus,
+  independent of your monitor volume, plus one click to silence it entirely
 - **Test tone** — the speaker button plays a 440 Hz signal through the
   device, so you can watch OUT and LOOP light up, confirm loopback works for
   your stream/recording, and see the measured loop delay in ms
