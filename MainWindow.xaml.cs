@@ -66,9 +66,7 @@ namespace MotuUI {
             RateBox.ItemsSource = new object[] { 44100, 48000, 88200, 96000, 176400, 192000 };
             BufBox.ItemsSource = new object[] { 16, 32, 64, 128, 256, 512, 1024 };
 
-            loading = true;
-            RefreshState();
-            loading = false;
+            loading = true; // cleared by the first Drv refresh below
 
             cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
             cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
@@ -80,22 +78,22 @@ namespace MotuUI {
 
             RateBox.SelectionChanged += (s, e) => {
                 if (loading || RateBox.SelectedItem == null) return;
-                MOTU.MSeriesSetSampleRate(dev, (uint)(int)RateBox.SelectedItem);
-                Applied();
+                var r = (uint)(int)RateBox.SelectedItem;
+                Drv(() => MOTU.MSeriesSetSampleRate(dev, r));
             };
             BufBox.SelectionChanged += (s, e) => {
                 if (loading || BufBox.SelectedItem == null) return;
-                MOTU.MSeriesSetHostBufferSize(dev, (uint)(int)BufBox.SelectedItem);
-                Applied();
+                var b = (uint)(int)BufBox.SelectedItem;
+                Drv(() => MOTU.MSeriesSetHostBufferSize(dev, b));
             };
-            SrcSwitch.Click += (s, e) => { srcOn = !srcOn; SyncLeds(); MOTU.MSeriesSetWaveSRCEnabled(dev, srcOn ? 1u : 0u); Pulse(); };
-            LlSwitch.Click += (s, e) => { llOn = !llOn; SyncLeds(); MOTU.MSeriesEnableLowLatencyMode(dev, llOn); Pulse(); };
+            SrcSwitch.Click += (s, e) => Drv(() => MOTU.MSeriesSetWaveSRCEnabled(dev, srcOn ? 0u : 1u));
+            LlSwitch.Click += (s, e) => Drv(() => { MOTU.MSeriesEnableLowLatencyMode(dev, !llOn); llOn = !llOn; });
             LoadPresets();
             BtnRec.Click += (s, e) => ApplyPreset(0);
             BtnStream.Click += (s, e) => ApplyPreset(1);
             BtnEditRec.Click += (s, e) => EditPreset(0);
             BtnEditStream.Click += (s, e) => EditPreset(1);
-            BtnRefresh.Click += (s, e) => RefreshState();
+            BtnRefresh.Click += (s, e) => Drv(() => {});
             BtnTest.Click += (s, e) => TestTone();
             BtnUpdate.Click += async (s, e) => await CheckDriverUpdate();
             MeterIn.Tapped += (s, e) => clipIn = false;
@@ -105,6 +103,7 @@ namespace MotuUI {
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += Tick;
             timer.Start();
+            Drv(() => {}); // initial state read, off the UI thread
         }
 
         void ApplyTitleBarTheme(ElementTheme theme) {
@@ -131,24 +130,48 @@ namespace MotuUI {
                 : Windows.UI.Color.FromArgb(prs, 0, 0, 0);
         }
 
+        void RunOnUI(Action a) {
+            var q = DispatcherQueue;
+            if (q != null && !q.HasThreadAccess) q.TryEnqueue(() => a()); else a();
+        }
+
+        // MSeriesLib calls can block for seconds inside the driver — read state off the
+        // caller's thread and marshal UI updates back.
         void RefreshState() {
             var v = new byte[256]; var s = new byte[256]; var n = new byte[256];
             MOTU.MSeriesGetDeviceInfo(dev, v, s, n);
-            devName = Str(n);
             var dv = new byte[256]; MOTU.MSeriesGetDriverVersion(dv);
             uint rate, buf, xso, ie, oe, src;
             MOTU.MSeriesGetCurrentState(dev, out rate, out buf, out xso, out ie, out oe);
             MOTU.MSeriesGetWaveSRCEnabled(dev, out src);
-            Title = "MOTU " + Str(n);
-            StatusText.Text = (rate / 1000.0).ToString("0.#") + " kHz   buf " + buf + "   " +
-                (rate > 0 ? buf * 1000.0 / rate : 0).ToString("0.00") + " ms";
-            InfoText.Text = "serial " + Str(s) + "   fw " + Str(v) + "   driver " + Str(dv);
-            bool was = loading; loading = true;
-            RateBox.SelectedItem = (int)rate;
-            BufBox.SelectedItem = (int)buf;
-            srcOn = src != 0;
-            loading = was;
-            SyncLeds();
+            string name = Str(n), ser = Str(s), fw = Str(v), dver = Str(dv);
+            RunOnUI(() => {
+                devName = name;
+                Title = "MOTU " + name;
+                StatusText.Text = (rate / 1000.0).ToString("0.#") + " kHz   buf " + buf + "   " +
+                    (rate > 0 ? buf * 1000.0 / rate : 0).ToString("0.00") + " ms";
+                InfoText.Text = "serial " + ser + "   fw " + fw + "   driver " + dver;
+                bool was = loading; loading = true;
+                RateBox.SelectedItem = (int)rate;
+                BufBox.SelectedItem = (int)buf;
+                srcOn = src != 0;
+                loading = was;
+                SyncLeds();
+            });
+        }
+
+        // Driver writes run on a worker so a wedged IOCTL can't freeze the window.
+        // Extra clicks while a write is in flight are dropped; the refresh at the end
+        // syncs LEDs/boxes back to the real device state.
+        bool drvBusy;
+        void Drv(Action call) {
+            if (drvBusy) return;
+            drvBusy = true;
+            timer.Stop();
+            Task.Run(() => {
+                try { call(); RefreshState(); } catch {}
+                RunOnUI(() => { drvBusy = false; loading = false; ReopenCaptures(); Pulse(); });
+            });
         }
 
         void SyncLeds() {
@@ -162,9 +185,6 @@ namespace MotuUI {
             dot.Fill = on ? On : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
             st.Text = on ? "On" : "Off";
         }
-
-        // Status read-back + a short fade tells the user "applied" without a dialog.
-        void Applied() { RefreshState(); ReopenCaptures(); Pulse(); }
 
         void Pulse() {
             var sb = new Storyboard();
@@ -198,10 +218,11 @@ namespace MotuUI {
 
         void ApplyPreset(int i) {
             var p = presets[i];
-            MOTU.MSeriesSetHostBufferSize(dev, (uint)p.Buffer);
-            MOTU.MSeriesEnableLowLatencyMode(dev, p.LowLatency);
-            llOn = p.LowLatency;
-            Applied();
+            Drv(() => {
+                MOTU.MSeriesSetHostBufferSize(dev, (uint)p.Buffer);
+                MOTU.MSeriesEnableLowLatencyMode(dev, p.LowLatency);
+                llOn = p.LowLatency;
+            });
         }
 
         async void EditPreset(int i) {
