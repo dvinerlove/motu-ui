@@ -11,6 +11,16 @@
 <meta property="og:description" content="Loopback vs Loopback Mix explained, OBS setup, and how to see the loopback level before you record it.">
 <meta property="og:url" content="https://dvinerlove.github.io/motu-ui/motu-m2-loopback-obs.html">
 <meta property="og:image" content="https://dvinerlove.github.io/motu-ui/screenshot.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"HowTo","name":"MOTU M2 / M4 loopback for OBS, Discord and recording",
+ "description":"How to use the MOTU M-series loopback channels in OBS, Discord and DAWs.",
+ "step":[
+ {"@type":"HowToStep","name":"Add the loopback source in OBS","text":"Add an Audio Input Capture source and pick MOTU M Series Loopback — it carries desktop audio plus your inputs."},
+ {"@type":"HowToStep","name":"Add your mic separately","text":"Add a second Audio Input Capture source with MOTU M Series In 1-2 for your mic, so you get independent faders."},
+ {"@type":"HowToStep","name":"Watch for the feedback trap","text":"If you monitor the loopback in OBS while it plays back through the same device, you can get an echo loop."},
+ {"@type":"HowToStep","name":"Verify the level","text":"Use motu-ui's LOOP meter and test-tone button to see the exact level OBS receives before recording."}
+]}
+</script>
 <style>
   :root{color-scheme:dark}
   *{margin:0;box-sizing:border-box}
