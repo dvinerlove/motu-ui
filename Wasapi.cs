@@ -57,6 +57,21 @@ namespace MotuUI {
         public static IAudioCaptureClient OpenCapture(EDataFlow flow) { return OpenCapture(flow, out _); }
 
         public static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels) {
+            // Capture endpoints carry channel-pair names ("In 1-2", "Loopback",
+            // "Loopback Mix"); prefer the physical inputs, avoid virtual ones.
+            return OpenCapture(flow, out channels,
+                flow == EDataFlow.eCapture ? "In " : null,
+                flow == EDataFlow.eCapture ? "Loopback" : null);
+        }
+
+        // The Loopback capture endpoint = playback audio as recorders hear it.
+        public static IAudioCaptureClient OpenLoopback(out int channels) {
+            var cc = OpenCapture(EDataFlow.eCapture, out channels, "Loopback", "Mix");
+            if (cc == null) cc = OpenCapture(EDataFlow.eCapture, out channels, "Loopback", null);
+            return cc;
+        }
+
+        static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, string prefer, string avoid) {
             channels = 2;
             var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
             IMMDeviceCollection coll;
@@ -67,10 +82,9 @@ namespace MotuUI {
                 IMMDevice d; coll.Item(i, out d);
                 var nm = FriendlyName(d);
                 if (!nm.Contains("MOTU")) continue;
-                if (flow == EDataFlow.eCapture) {
-                    if (nm.StartsWith("In ")) { first = d; break; }
-                    if (first == null) first = d;
-                } else { first = d; break; }
+                if (avoid != null && nm.Contains(avoid)) continue;
+                if (prefer != null && nm.StartsWith(prefer)) { first = d; break; }
+                if (first == null) first = d;
             }
             if (first == null) return null;
             object o;

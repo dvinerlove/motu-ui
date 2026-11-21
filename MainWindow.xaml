@@ -43,6 +43,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
                     <RowDefinition Height="16"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
@@ -71,7 +72,17 @@
                            TextAlignment="Right"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
-                <Grid x:Name="ScaleHost" Grid.Row="2" Grid.Column="1" Margin="12,0"/>
+                <TextBlock Text="LOOP" Grid.Row="2" VerticalAlignment="Center"
+                           Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <Grid x:Name="MeterLoopHost" Grid.Row="2" Grid.Column="1" Margin="12,0" MinHeight="28"
+                      ToolTipService.ToolTip="loopback — playback audio as recorders hear it (what OBS captures); click to reset clip"/>
+                <TextBlock x:Name="DbLoop" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
+                           FontFamily="Cascadia Mono, Consolas" FontSize="12" Width="72" Text="-&#x221E;"
+                           TextAlignment="Right"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                <Grid x:Name="ScaleHost" Grid.Row="3" Grid.Column="1" Margin="12,0"/>
             </Grid>
         </Border>
 

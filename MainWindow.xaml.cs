@@ -25,14 +25,14 @@ namespace MotuUI {
         static uint dev;
         internal static void SetDevice(uint d) { dev = d; }
         string devName = "";
-        int chIn = 2, chOut = 2;
-        LedMeter MeterIn, MeterOut;
-        IAudioCaptureClient cin, cout;
+        int chIn = 2, chOut = 2, chLoop = 2;
+        LedMeter MeterIn, MeterOut, MeterLoop;
+        IAudioCaptureClient cin, cout, cloop;
         DispatcherTimer timer;
-        double pkIL = -100, pkIR = -100, pkOL = -100, pkOR = -100;
-        double dIL = -100, dIR = -100, dOL = -100, dOR = -100;
-        int holdIL, holdIR, holdOL, holdOR;
-        bool clipIn, clipOut;
+        double pkIL = -100, pkIR = -100, pkOL = -100, pkOR = -100, pkLL = -100, pkLR = -100;
+        double dIL = -100, dIR = -100, dOL = -100, dOR = -100, dLL = -100, dLR = -100;
+        int holdIL, holdIR, holdOL, holdOR, holdLL, holdLR;
+        bool clipIn, clipOut, clipLoop;
         bool srcOn, llOn;
         int reopens;
         bool loading;
@@ -46,6 +46,7 @@ namespace MotuUI {
             SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
             MeterIn = new LedMeter(); MeterInHost.Children.Add(MeterIn);
             MeterOut = new LedMeter(); MeterOutHost.Children.Add(MeterOut);
+            MeterLoop = new LedMeter(); MeterLoopHost.Children.Add(MeterLoop);
             ScaleHost.Children.Add(new DbScale());
             Title = "MOTU";
             try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "motu.ico")); } catch {}
@@ -55,7 +56,7 @@ namespace MotuUI {
             root.Loaded += (s, e) => {
                 var rs = root.XamlRoot.RasterizationScale;
                 AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)(540 * rs)));
-                if (pres != null) { pres.PreferredMinimumWidth = (int)(560 * rs); pres.PreferredMinimumHeight = (int)(380 * rs); }
+                if (pres != null) { pres.PreferredMinimumWidth = (int)(560 * rs); pres.PreferredMinimumHeight = (int)(440 * rs); }
                 ApplyTitleBarTheme(root.ActualTheme);
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
@@ -69,6 +70,7 @@ namespace MotuUI {
 
             cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
             cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
+            cloop = Wasapi.OpenLoopback(out chLoop);
 
             RateBox.SelectionChanged += (s, e) => {
                 if (loading || RateBox.SelectedItem == null) return;
@@ -91,6 +93,7 @@ namespace MotuUI {
             BtnUpdate.Click += async (s, e) => await CheckDriverUpdate();
             MeterIn.Tapped += (s, e) => clipIn = false;
             MeterOut.Tapped += (s, e) => clipOut = false;
+            MeterLoop.Tapped += (s, e) => clipLoop = false;
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += Tick;
@@ -259,19 +262,22 @@ namespace MotuUI {
             timer.Stop();
             if (cin != null) Marshal.ReleaseComObject(cin);
             if (cout != null) Marshal.ReleaseComObject(cout);
-            cin = null; cout = null;
+            if (cloop != null) Marshal.ReleaseComObject(cloop);
+            cin = null; cout = null; cloop = null;
             try {
                 cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
                 cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
+                cloop = Wasapi.OpenLoopback(out chLoop);
             } catch {}
             timer.Start();
         }
 
         void Tick(object s, object e) {
-            double il, ir, ol, orr;
+            double il, ir, ol, orr, ll, lr;
             try {
                 if (!Wasapi.Peak2(cin, chIn, out il, out ir)) { il = ir = -100; }
                 if (!Wasapi.Peak2(cout, chOut, out ol, out orr)) { ol = orr = -100; }
+                if (!Wasapi.Peak2(cloop, chLoop, out ll, out lr)) { ll = lr = -100; }
             } catch {
                 if (reopens++ < 3) { ReopenCaptures(); return; }
                 timer.Stop(); return;
@@ -282,17 +288,24 @@ namespace MotuUI {
             dIR = Math.Max(ir, dIR - 1.5);
             dOL = Math.Max(ol, dOL - 1.5);
             dOR = Math.Max(orr, dOR - 1.5);
+            dLL = Math.Max(ll, dLL - 1.5);
+            dLR = Math.Max(lr, dLR - 1.5);
             pkIL = Peak(il, ref pkIL, ref holdIL);
             pkIR = Peak(ir, ref pkIR, ref holdIR);
             pkOL = Peak(ol, ref pkOL, ref holdOL);
             pkOR = Peak(orr, ref pkOR, ref holdOR);
+            pkLL = Peak(ll, ref pkLL, ref holdLL);
+            pkLR = Peak(lr, ref pkLR, ref holdLR);
             if (il > -0.5 || ir > -0.5) clipIn = true;
             if (ol > -0.5 || orr > -0.5) clipOut = true;
+            if (ll > -0.5 || lr > -0.5) clipLoop = true;
             MeterIn.SetLevels(dIL, dIR, pkIL, pkIR, clipIn);
             MeterOut.SetLevels(dOL, dOR, pkOL, pkOR, clipOut);
-            double mxI = Math.Max(il, ir), mxO = Math.Max(ol, orr);
+            MeterLoop.SetLevels(dLL, dLR, pkLL, pkLR, clipLoop);
+            double mxI = Math.Max(il, ir), mxO = Math.Max(ol, orr), mxL = Math.Max(ll, lr);
             DbIn.Text = mxI <= -60 ? "-∞" : mxI.ToString(" 0.0;-0.0") + "dB";
             DbOut.Text = mxO <= -60 ? "-∞" : mxO.ToString(" 0.0;-0.0") + "dB";
+            DbLoop.Text = cloop == null ? "—" : (mxL <= -60 ? "-∞" : mxL.ToString(" 0.0;-0.0") + "dB");
         }
 
         static double Peak(double v, ref double pk, ref int hold) {
