@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace MotuUI {
     enum EDataFlow { eRender = 0, eCapture = 1 }
@@ -41,6 +42,11 @@ namespace MotuUI {
         int ReleaseBuffer(uint frames);
         int GetNextPacketSize(out uint frames);
     }
+    [ComImport, Guid("F294ACFC-3146-4483-A7BF-ADDCA7C260E2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioRenderClient {
+        int GetBuffer(uint frames, out IntPtr data);
+        int ReleaseBuffer(uint frames, int flags);
+    }
 
     static class Wasapi {
         static readonly Guid IID_IAudioClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
@@ -62,6 +68,56 @@ namespace MotuUI {
             return OpenCapture(flow, out channels,
                 flow == EDataFlow.eCapture ? "In " : null,
                 flow == EDataFlow.eCapture ? "Loopback" : null);
+        }
+
+        // First MOTU render endpoint, opened for actual playback (shared mode).
+        public static IAudioRenderClient OpenRender(out IAudioClient ac, out int channels, out int rate) {
+            ac = null; channels = 2; rate = 48000;
+            var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
+            IMMDeviceCollection coll;
+            if (e.EnumAudioEndpoints(EDataFlow.eRender, 1, out coll) != 0) return null;
+            uint n; coll.GetCount(out n);
+            for (uint i = 0; i < n; i++) {
+                IMMDevice d; coll.Item(i, out d);
+                if (!FriendlyName(d).Contains("MOTU")) continue;
+                object o;
+                if (d.Activate(IID_IAudioClient, 0x17, IntPtr.Zero, out o) != 0) continue;
+                var a = (IAudioClient)o;
+                IntPtr pf; if (a.GetMixFormat(out pf) != 0) continue;
+                channels = Marshal.ReadInt16(pf, 2);
+                rate = Marshal.ReadInt32(pf, 4);
+                if (a.Initialize(0, 0, 0, 0, pf, IntPtr.Zero) != 0) continue;
+                object rc; if (a.GetService(IID_IAudioRenderClient, out rc) != 0) continue;
+                ac = a;
+                return (IAudioRenderClient)rc;
+            }
+            return null;
+        }
+
+        static readonly Guid IID_IAudioRenderClient = new Guid("F294ACFC-3146-4483-A7BF-ADDCA7C260E2");
+
+        // Blocking sine at mix-format rate — call from a worker thread.
+        public static unsafe void Tone(IAudioClient ac, IAudioRenderClient rc, int ch, int rate, double sec) {
+            ac.Start();
+            uint bufN; ac.GetBufferSize(out bufN);
+            int total = (int)(rate * sec), wrote = 0;
+            while (wrote < total) {
+                uint pad; ac.GetCurrentPadding(out pad);
+                uint avail = bufN > pad ? bufN - pad : 0;
+                if (avail == 0) { Thread.Sleep(5); continue; }
+                uint chunk = Math.Min(avail, (uint)(total - wrote));
+                IntPtr p;
+                if (rc.GetBuffer(chunk, out p) != 0) break;
+                float* f = (float*)p;
+                for (uint i = 0; i < chunk; i++) {
+                    float s = (float)Math.Sin(2 * Math.PI * 440.0 * (wrote + i) / rate) * 0.3f;
+                    for (int c = 0; c < ch; c++) f[i * ch + c] = s;
+                }
+                rc.ReleaseBuffer(chunk, 0);
+                wrote += (int)chunk;
+            }
+            Thread.Sleep(200); // drain
+            ac.Stop();
         }
 
         // The Loopback capture endpoint = playback audio as recorders hear it.

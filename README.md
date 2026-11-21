@@ -26,6 +26,9 @@ no .NET needed. Unzip and run `motu-ui.exe`.
   indication, no DAW needed to see if signal is flowing
 - **Loopback meter** — a third ladder showing the loopback capture endpoint,
   i.e. exactly what OBS and other recorders hear
+- **Test tone** — the speaker button plays a 440 Hz signal through the
+  device, so you can watch OUT and LOOP light up and confirm loopback
+  works for your stream/recording
 - **Sample rate and buffer size** — apply instantly, with latency readout
 - **Low latency mode** — driver-level switch that isn't exposed in the stock UI
 - **WaveSRC** — the driver's sample rate converter for Windows audio
@@ -61,6 +64,7 @@ x86. Everything else (Windows App SDK runtime included) is self-contained.
 | Buffer size | yes | yes, with latency readout |
 | Live I/O meters | no | yes — peak hold + clip |
 | Loopback monitor | no | yes — what OBS hears |
+| Test tone | no | yes — one-click signal check |
 | Low latency mode | hidden | one click |
 | WaveSRC | hidden | one click, explained |
 | Presets | no | editable |

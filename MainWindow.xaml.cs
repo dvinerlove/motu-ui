@@ -90,6 +90,7 @@ namespace MotuUI {
             BtnEditRec.Click += (s, e) => EditPreset(0);
             BtnEditStream.Click += (s, e) => EditPreset(1);
             BtnRefresh.Click += (s, e) => RefreshState();
+            BtnTest.Click += (s, e) => TestTone();
             BtnUpdate.Click += async (s, e) => await CheckDriverUpdate();
             MeterIn.Tapped += (s, e) => clipIn = false;
             MeterOut.Tapped += (s, e) => clipOut = false;
@@ -256,6 +257,24 @@ namespace MotuUI {
                 prog.Hide();
                 Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
             } catch (Exception ex) { await Info("Driver update", "Failed: " + ex.Message); }
+        }
+
+        bool testing;
+        void TestTone() {
+            if (testing) return;
+            testing = true;
+            Task.Run(() => {
+                IAudioClient ac = null; IAudioRenderClient rc = null;
+                try {
+                    int ch, rate;
+                    rc = Wasapi.OpenRender(out ac, out ch, out rate);
+                    if (rc != null) Wasapi.Tone(ac, rc, ch, rate, 1.5);
+                } catch {} finally {
+                    if (rc != null) Marshal.ReleaseComObject(rc);
+                    if (ac != null) Marshal.ReleaseComObject(ac);
+                    testing = false;
+                }
+            });
         }
 
         void ReopenCaptures() {
