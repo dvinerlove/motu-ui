@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>motu-ui — MOTU M2 / M4 / M6 control panel for Windows</title>
+<meta name="description" content="Free open-source Windows utility for MOTU M-series audio interfaces: live input/output meters, loopback monitor for OBS and streaming, buffer size and sample rate control, low-latency presets, driver update check.">
+<link rel="canonical" href="https://dvinerlove.github.io/motu-ui/">
+<style>
+  :root{color-scheme:dark}
+  *{margin:0;box-sizing:border-box}
+  body{font:16px/1.55 "Segoe UI",system-ui,sans-serif;background:#1b1b1b;color:#e8e8e8;padding:48px 24px}
+  main{max-width:720px;margin:0 auto}
+  h1{font-size:28px;font-weight:600}
+  .sub{color:#a8a8a8;margin:8px 0 24px}
+  img{width:100%;border-radius:8px;border:1px solid #333;margin:16px 0}
+  .dl{display:inline-block;background:#4cc2ff;color:#000;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none;margin:8px 8px 24px 0}
+  .gh{color:#4cc2ff}
+  h2{font-size:19px;margin:28px 0 10px}
+  ul{padding-left:20px;color:#cfcfcf}
+  li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;color:#cfcfcf;font-size:15px}
+  td,th{border-bottom:1px solid #333;padding:7px 8px;text-align:left}
+  th{color:#a8a8a8;font-weight:600}
+  dt{font-weight:600;margin-top:14px}
+  dd{color:#cfcfcf;margin:4px 0 0}
+  footer{margin-top:40px;color:#888;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>motu-ui</h1>
+  <p class="sub">A small Windows control panel for MOTU M2, M4 and M6 audio interfaces —
+  the meters and controls the stock MOTU panel doesn't show.</p>
+
+  <img src="demo.gif" alt="motu-ui live meters responding to a test tone">
+
+  <a class="dl" href="https://github.com/dvinerlove/motu-ui/releases/latest">Download for Windows</a>
+  <a class="dl gh" style="background:transparent;border:1px solid #4cc2ff" href="https://github.com/dvinerlove/motu-ui">GitHub</a>
+
+  <h2>What it does</h2>
+  <ul>
+    <li>Live stereo ladders for <b>IN</b> and <b>OUT</b> with peak hold and clip indication</li>
+    <li><b>Loopback monitor</b> — a third meter showing exactly what OBS, Discord and other recorders hear</li>
+    <li><b>Test tone</b> — one click plays 440&nbsp;Hz through the device so you can verify loopback visually</li>
+    <li>Sample rate (44.1–192&nbsp;kHz) and host buffer size (16–2048 samples) with live latency readout</li>
+    <li>WaveSRC and Low Latency toggles the stock panel hides</li>
+    <li>Editable presets — e.g. <i>Record</i>: 16 samples + low latency, <i>Stream</i>: 128 samples</li>
+    <li>Driver update check against the MOTU download page for your exact model</li>
+  </ul>
+
+  <h2>vs. the stock M Series Control Panel</h2>
+  <table>
+    <tr><th></th><th>stock panel</th><th>motu-ui</th></tr>
+    <tr><td>Live input/output meters</td><td>no</td><td>yes</td></tr>
+    <tr><td>Loopback monitor (what OBS hears)</td><td>no</td><td>yes</td></tr>
+    <tr><td>Test tone</td><td>no</td><td>yes</td></tr>
+    <tr><td>Buffer size / sample rate</td><td>yes</td><td>yes</td></tr>
+    <tr><td>Editable latency presets</td><td>no</td><td>yes</td></tr>
+    <tr><td>Driver update check</td><td>no</td><td>yes</td></tr>
+  </table>
+
+  <h2>Requirements</h2>
+  <ul>
+    <li>Windows 10 1809+ (x86 or x64 — the app itself is 32-bit because MOTU's control library is)</li>
+    <li>A MOTU M2, M4 or M6 with the official MOTU driver installed</li>
+  </ul>
+
+  <h2>FAQ</h2>
+  <dl>
+    <dt>Is there a mixer for the MOTU M2?</dt>
+    <dd>The M-series has no DSP mixer in hardware — routing is fixed. What you can control is
+    buffer size, sample rate, WaveSRC and low-latency mode, which is what motu-ui exposes,
+    plus live meters the stock panel doesn't have.</dd>
+    <dt>Can I hear my loopback in OBS?</dt>
+    <dd>The LOOP meter shows the level of the loopback capture endpoint — the exact signal
+    OBS or any recorder receives. Press the speaker button to send a 440&nbsp;Hz test tone
+    and watch both OUT and LOOP light up.</dd>
+    <dt>Does it work on the M4 and M6?</dt>
+    <dd>Yes. Device name, channel count and update page are read from the hardware.
+    Meters show the first stereo pair on multichannel devices.</dd>
+    <dt>What is WaveSRC?</dt>
+    <dd>An undocumented clock-source flag in the MOTU M-series driver, exposed by MSeriesLib.
+    motu-ui toggles it the same way the official panel does.</dd>
+    <dt>Is it safe? Does it replace the MOTU driver?</dt>
+    <dd>No — it wraps the official MSeriesLib.dll that ships with the MOTU driver.
+    Every write is verified by reading state back from the device.</dd>
+  </dl>
+
+  <footer>
+    Free and open source, MIT license ·
+    <a class="gh" href="https://github.com/dvinerlove/motu-ui">github.com/dvinerlove/motu-ui</a>
+  </footer>
+</main>
+</body>
+</html>
