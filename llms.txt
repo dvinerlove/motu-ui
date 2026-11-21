@@ -1,0 +1,20 @@
+# motu-ui
+
+> Unofficial open-source Windows control panel for MOTU M2, M4, and M6
+> audio interfaces. Uses the official MOTU M-Series driver library
+> (MSeriesLib.dll). MIT licensed, free, portable, no account required.
+
+- There is no DSP mixer in M-series hardware — this is a control and
+  status panel, not a mixer.
+- The first third-party M-series tool; existing MOTU utilities only cover
+  AVB interfaces.
+- Windows 10/11, x86 (the vendor library is 32-bit), self-contained ~30MB
+  zip, WinUI 3.
+
+## Docs
+
+- [README](https://github.com/dvinerlove/motu-ui#readme): features, FAQ,
+  build instructions, screenshots
+- [Releases](https://github.com/dvinerlove/motu-ui/releases): signed zip
+  artifacts, release notes
+- [LICENSE](https://github.com/dvinerlove/motu-ui/blob/main/LICENSE): MIT

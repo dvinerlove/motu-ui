@@ -51,6 +51,49 @@ Output lands in `bin\x86\Release\net10.0-windows10.0.19041.0\win-x86\`.
 **Why x86:** the installed MOTU library is 32-bit, so the app must run as
 x86. Everything else (Windows App SDK runtime included) is self-contained.
 
+## motu-ui vs the stock M-Series panel
+
+| | Stock MOTU panel | motu-ui |
+|---|---|---|
+| Sample rate | yes | yes |
+| Buffer size | yes | yes, with latency readout |
+| Live I/O meters | no | yes — peak hold + clip |
+| Low latency mode | hidden | one click |
+| WaveSRC | hidden | one click, explained |
+| Presets | no | editable |
+| Driver update check | no | per your model, from motu.com |
+| Window | fixed size | Mica, theme-aware, resizable |
+
+Screenshots: [preset editing](docs/preset-edit.png) ·
+[driver update check](docs/update-check.png)
+
+## FAQ
+
+**Is there a mixer for the MOTU M2?**
+No — the M2, M4, and M6 have no DSP mixing hardware, so no tool can offer a
+software mixer for them. motu-ui is a control and status panel: it shows
+live meters and exposes every setting the driver actually has.
+
+**Is there software for the MOTU M2 besides the official panel?**
+Yes — motu-ui is the first third-party option. Existing MOTU tools only
+cover the older AVB interfaces (UltraLite AVB, 1248, 16A), which M-series
+units are not.
+
+**What is WaveSRC on a MOTU interface?**
+Wave Sample Rate Conversion — the driver-level resampler for normal Windows
+(WAVE) audio. On: apps can run at any sample rate and the driver converts.
+Off: apps must match the device rate exactly, for a bit-exact path.
+
+**Does motu-ui replace the MOTU driver?**
+No. It uses the official M-Series driver library, so the driver must be
+installed. Think of it as a better front panel for the driver you already
+have.
+
+**Does it work on the M4 or M6?**
+Yes — the app reads the connected model and adjusts the update check and
+channel layout. The meters currently show the first stereo pair on
+multi-channel models.
+
 ## Notes
 
 - Low latency mode has no read-back in the driver API — the button shows what
