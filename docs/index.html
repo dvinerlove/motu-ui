@@ -17,12 +17,12 @@
 <meta name="twitter:image" content="https://dvinerlove.github.io/motu-ui/screenshot.png">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":"SoftwareApplication","name":"motu-ui","applicationCategory":"MultimediaApplication","operatingSystem":"Windows 10, Windows 11","description":"Free open-source control panel for MOTU M2/M4/M6 audio interfaces: live meters, loopback monitor for OBS, buffer and sample-rate control, low-latency presets, driver update check.","url":"https://dvinerlove.github.io/motu-ui/","downloadUrl":"https://github.com/dvinerlove/motu-ui/releases","screenshot":"https://dvinerlove.github.io/motu-ui/screenshot.png","softwareVersion":"1.0.0","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"dvinerlove"},"sameAs":"https://github.com/dvinerlove/motu-ui"},
+{"@type":"SoftwareApplication","name":"motu-ui","applicationCategory":"MultimediaApplication","operatingSystem":"Windows 10, Windows 11","description":"Free open-source control panel for MOTU M2/M4/M6 audio interfaces: live meters, loopback monitor for OBS, buffer and sample-rate control, low-latency presets, driver update check.","url":"https://dvinerlove.github.io/motu-ui/","downloadUrl":"https://github.com/dvinerlove/motu-ui/releases","screenshot":"https://dvinerlove.github.io/motu-ui/screenshot.png","softwareVersion":"1.1.0","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"dvinerlove"},"sameAs":"https://github.com/dvinerlove/motu-ui"},
 {"@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"Is there a mixer for the MOTU M2?","acceptedAnswer":{"@type":"Answer","text":"The M-series has no DSP mixer in hardware — routing is fixed. What you can control is buffer size, sample rate, WaveSRC and low-latency mode, which is what motu-ui exposes, plus live meters the stock panel doesn't have."}},
+{"@type":"Question","name":"Is there a mixer for the MOTU M2?","acceptedAnswer":{"@type":"Answer","text":"The M-series has no DSP mixer in hardware — routing is fixed. What you can control is buffer size, sample rate, sample-rate sync (WaveSRC) and low-latency mode, which is what motu-ui exposes, plus live meters the stock panel doesn't have."}},
 {"@type":"Question","name":"Can I hear my loopback in OBS?","acceptedAnswer":{"@type":"Answer","text":"The LOOP meter shows the level of the loopback capture endpoint — the exact signal OBS or any recorder receives. Press the speaker button to send a 440 Hz test tone and watch both OUT and LOOP light up."}},
 {"@type":"Question","name":"Does it work on the M4 and M6?","acceptedAnswer":{"@type":"Answer","text":"Yes. Device name, channel count and update page are read from the hardware. Meters show the first stereo pair on multichannel devices."}},
-{"@type":"Question","name":"What is WaveSRC?","acceptedAnswer":{"@type":"Answer","text":"Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio. On, apps can run at any sample rate; off, apps must match the device rate for a bit-exact path."}},
+{"@type":"Question","name":"What is WaveSRC?","acceptedAnswer":{"@type":"Answer","text":"Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio. It's the same flag as the stock panel's 'Sync Windows sample rate' checkbox, shown with opposite polarity: sync on = WaveSRC off = bit-exact; sync off = WaveSRC resamples apps at any rate."}},
 {"@type":"Question","name":"Is it safe? Does it replace the MOTU driver?","acceptedAnswer":{"@type":"Answer","text":"No — it wraps the official MSeriesLib.dll that ships with the MOTU driver. Device state is read back after every change."}}
 ]}
 ]}
@@ -66,7 +66,7 @@
     <li><b>Loopback monitor</b> — a third meter showing exactly what OBS, Discord and other recorders hear</li>
     <li><b>Test tone</b> — one click plays 440&nbsp;Hz through the device so you can verify loopback visually</li>
     <li>Sample rate (44.1–192&nbsp;kHz) and host buffer size (16–1024 samples) with live latency readout</li>
-    <li>WaveSRC and Low Latency toggles, plainly named with tooltips that say what they do</li>
+    <li>Sync rate and Low Latency toggles, plainly named with tooltips that say what they do</li>
     <li>Editable presets — e.g. <i>Record</i>: 16 samples + low latency, <i>Stream</i>: 128 samples</li>
     <li>Driver update check against the MOTU download page for your exact model</li>
   </ul>
@@ -92,7 +92,7 @@
   <dl>
     <dt>Is there a mixer for the MOTU M2?</dt>
     <dd>The M-series has no DSP mixer in hardware — routing is fixed. What you can control is
-    buffer size, sample rate, WaveSRC and low-latency mode, which is what motu-ui exposes,
+    buffer size, sample rate, sample-rate sync (WaveSRC) and low-latency mode, which is what motu-ui exposes,
     plus live meters the stock panel doesn't have.</dd>
     <dt>Can I hear my loopback in OBS?</dt>
     <dd>The LOOP meter shows the level of the loopback capture endpoint — the exact signal
@@ -103,7 +103,8 @@
     Meters show the first stereo pair on multichannel devices.</dd>
     <dt>What is WaveSRC?</dt>
     <dd>Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio.
-    On, apps can run at any sample rate; off, apps must match the device rate for a bit-exact path.</dd>
+    Same flag as the stock panel's "Sync Windows sample rate" checkbox, shown inverted:
+    sync on = WaveSRC off = bit-exact; sync off = WaveSRC resamples apps at any rate.</dd>
     <dt>Is it safe? Does it replace the MOTU driver?</dt>
     <dd>No — it wraps the official MSeriesLib.dll that ships with the MOTU driver.
     Device state is read back after every change.</dd>

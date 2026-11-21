@@ -23,8 +23,11 @@ namespace MotuUI {
     }
 
     public sealed partial class MainWindow : Window {
-        static uint dev;
-        internal static void SetDevice(uint d) { dev = d; }
+        // The probe only proves the device exists; every driver call then opens
+        // a short init/free session — a session held for the app's lifetime
+        // starves the stock control panel (it can't reach the device while a
+        // client holds it).
+        bool haveDev;
         string devName = "";
         int chIn = 2, chOut = 2, chLoop = 2;
         LedMeter MeterIn, MeterOut, MeterLoop;
@@ -46,7 +49,7 @@ namespace MotuUI {
         AirSpark airHistory;
         readonly List<AirRow> airRows = new List<AirRow>();
         AirRow[] airSnapshot = new AirRow[0];
-        readonly Dictionary<string, double> airDb = new Dictionary<string, double>();
+        string drvVer = "";
         // The capture worker owns every WASAPI client; the UI only reads this snapshot.
         readonly object snapLock = new object();
         double sIL = -100, sIR = -100, sOL = -100, sOR = -100, sLL = -100, sLR = -100;
@@ -102,15 +105,15 @@ namespace MotuUI {
             RateBox.SelectionChanged += (s, e) => {
                 if (loading || RateBox.SelectedItem == null) return;
                 var r = (uint)(int)RateBox.SelectedItem;
-                Drv(() => MOTU.MSeriesSetSampleRate(dev, r));
+                Drv(d => MOTU.MSeriesSetSampleRate(d, r));
             };
             BufBox.SelectionChanged += (s, e) => {
                 if (loading || BufBox.SelectedItem == null) return;
                 var b = (uint)(int)BufBox.SelectedItem;
-                Drv(() => MOTU.MSeriesSetHostBufferSize(dev, b));
+                Drv(d => MOTU.MSeriesSetHostBufferSize(d, b));
             };
-            SrcSwitch.Click += (s, e) => Drv(() => MOTU.MSeriesSetWaveSRCEnabled(dev, srcOn ? 0u : 1u));
-            LlSwitch.Click += (s, e) => Drv(() => { MOTU.MSeriesEnableLowLatencyMode(dev, !llOn); llOn = !llOn; });
+            SrcSwitch.Click += (s, e) => Drv(d => MOTU.MSeriesSetWaveSRCEnabled(d, srcOn ? 0u : 1u));
+            LlSwitch.Click += (s, e) => Drv(d => { MOTU.MSeriesEnableLowLatencyMode(d, !llOn); llOn = !llOn; });
             BtnExp.Click += (s, e) => {
                 expOn = !expOn;
                 try { File.WriteAllText(CfgPath, expOn ? "1" : "0"); } catch {}
@@ -129,7 +132,7 @@ namespace MotuUI {
             BtnStream.Click += (s, e) => ApplyPreset(1);
             BtnEditRec.Click += (s, e) => EditPreset(0);
             BtnEditStream.Click += (s, e) => EditPreset(1);
-            BtnRefresh.Click += (s, e) => Drv(() => {});
+            BtnRefresh.Click += (s, e) => Drv(d => {});
             BtnTest.Click += (s, e) => TestTone();
             BtnUpdate.Click += async (s, e) => await CheckDriverUpdate();
             MeterIn.Tapped += (s, e) => clipIn = false;
@@ -149,12 +152,14 @@ namespace MotuUI {
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += Tick;
             timer.Start();
-            if (dev != 0) Drv(() => {}); // initial state read, off the UI thread
-            else { StatusText.Text = "—"; InfoText.Text = "waiting for device…"; }
+            StatusText.Text = "—";
+            InfoText.Text = "waiting for device…";
         }
 
-        // Called by App once the worker-side MSeriesInit probe resolves.
-        internal void DeviceReady() { Drv(() => {}); }
+        // Called by App once the probe has found and released the device.
+        internal void DeviceReady() {
+            haveDev = true; loading = false; needReopen = true; Pulse();
+        }
         internal void NoDevice() { StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
 
         void ApplyTitleBarTheme(ElementTheme theme) {
@@ -187,17 +192,19 @@ namespace MotuUI {
         }
 
         // MSeriesLib calls can block for seconds inside the driver — read state off the
-        // caller's thread and marshal UI updates back.
-        void RefreshState() {
+        // caller's thread and marshal UI updates back. Must run inside a session (Drv or
+        // the App probe).
+        internal void RefreshState(uint d) {
             var v = new byte[256]; var s = new byte[256]; var n = new byte[256];
-            MOTU.MSeriesGetDeviceInfo(dev, v, s, n);
+            MOTU.MSeriesGetDeviceInfo(d, v, s, n);
             var dv = new byte[256]; MOTU.MSeriesGetDriverVersion(dv);
             uint rate, buf, xso, ie, oe, src;
-            MOTU.MSeriesGetCurrentState(dev, out rate, out buf, out xso, out ie, out oe);
-            MOTU.MSeriesGetWaveSRCEnabled(dev, out src);
+            MOTU.MSeriesGetCurrentState(d, out rate, out buf, out xso, out ie, out oe);
+            MOTU.MSeriesGetWaveSRCEnabled(d, out src);
             string name = Str(n), ser = Str(s), fw = Str(v), dver = Str(dv);
             RunOnUI(() => {
                 devName = name;
+                drvVer = dver;
                 Title = "MOTU " + name;
                 StatusText.Text = (rate / 1000.0).ToString("0.#") + " kHz   buf " + buf + "   " +
                     (rate > 0 ? buf * 1000.0 / rate : 0).ToString("0.00") + " ms";
@@ -211,22 +218,34 @@ namespace MotuUI {
             });
         }
 
-        // Driver writes run on the shared driver thread (MSeriesLib is
-        // thread-affine) so a wedged IOCTL can't freeze the window. Extra clicks
-        // while a write is in flight are dropped; the refresh at the end syncs
-        // LEDs/boxes back to the real device state.
-        bool drvBusy;
-        void Drv(Action call) {
-            if (drvBusy || dev == 0) return;
+        // Driver ops run on the shared driver thread (MSeriesLib is
+        // thread-affine) inside a short init/free session, so a wedged IOCTL
+        // can't freeze the window and an idle app never holds the device.
+        // Extra clicks while a write is in flight are dropped; the refresh at
+        // the end syncs LEDs/boxes back to the real device state.
+        internal bool drvBusy;
+        void Drv(Action<uint> call) {
+            if (drvBusy || !haveDev) return;
             drvBusy = true;
             MOTU.Post(() => {
-                try { call(); RefreshState(); } catch {}
+                try {
+                    if (MOTU.MSeriesInit() == 0) {
+                        uint d = 0;
+                        for (int j = 0; d == 0 && j < 20; j++) {
+                            MOTU.MSeriesGetDevice(0, out d);
+                            if (d == 0) Thread.Sleep(300);
+                        }
+                        if (d != 0) try { call(d); RefreshState(d); } catch {}
+                    }
+                } catch {} finally { try { MOTU.MSeriesFree(); } catch {} }
                 RunOnUI(() => { drvBusy = false; loading = false; needReopen = true; Pulse(); });
             });
         }
 
         void SyncLeds() {
-            Led(SrcDot, SrcState, srcOn);
+            // Shown inverted on purpose: the stock panel and our label describe
+            // "sync Windows rate to device" (= WaveSRC off), not the raw flag.
+            Led(SrcDot, SrcState, !srcOn);
             Led(LlDot, LlState, llOn);
         }
 
@@ -290,9 +309,9 @@ namespace MotuUI {
 
         void ApplyPreset(int i) {
             var p = presets[i];
-            Drv(() => {
-                MOTU.MSeriesSetHostBufferSize(dev, (uint)p.Buffer);
-                MOTU.MSeriesEnableLowLatencyMode(dev, p.LowLatency);
+            Drv(d => {
+                MOTU.MSeriesSetHostBufferSize(d, (uint)p.Buffer);
+                MOTU.MSeriesEnableLowLatencyMode(d, p.LowLatency);
                 llOn = p.LowLatency;
             });
         }
@@ -337,8 +356,8 @@ namespace MotuUI {
                 var m = Regex.Match(Regex.Replace(html, @"\s+", " "),
                     @"fa-windows.{0,400}?PC v([\d.]+).{0,1500}?download-center/download/(\d+)");
                 if (!m.Success) { await Info("Driver update", "Couldn't find the Windows installer on motu.com — page layout may have changed."); return; }
-                var dv = new byte[256]; MOTU.MSeriesGetDriverVersion(dv);
-                var cur = Str(dv);
+                var cur = drvVer;
+                if (string.IsNullOrEmpty(cur)) { await Info("Driver update", "No device connected — can't read the installed driver version."); return; }
                 var latest = m.Groups[1].Value;
                 if (!Newer(latest, cur)) { await Info("Driver update", "Already up to date — v" + cur + "."); return; }
                 var ask = new ContentDialog {
@@ -560,7 +579,7 @@ namespace MotuUI {
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
             };
-            ToolTipService.SetToolTip(btn, "mute this app on the stream only — you still hear it locally");
+            ToolTipService.SetToolTip(btn, "mute this app — silences it for you and the stream (Windows session volume, not bus-only)");
             var row = r;
             btn.Click += (bs, be) => {
                 var s = row.S;

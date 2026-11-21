@@ -15,7 +15,7 @@ control is a real driver call, nothing is faked.
 
 ## Download
 
-Grab `motu-ui-v1.0.0-win-x86.zip` from
+Grab `motu-ui-v1.1.0-win-x86.zip` from
 [Releases](https://github.com/dvinerlove/motu-ui/releases) — self-contained,
 no .NET needed. Unzip and run `motu-ui.exe`.
 
@@ -29,6 +29,8 @@ no .NET needed. Unzip and run `motu-ui.exe`.
   and a per-app mute
 - **Bus level and mute** — a fader for how loud recorders hear the bus,
   independent of your monitor volume, plus one click to silence it entirely
+- **Experimental gate** — the ON AIR card is hidden by default; the puzzle
+  icon in the title row turns it on (the window grows to fit it)
 - **Test tone** — the speaker button plays a 440 Hz signal through the
   device, so you can watch OUT and LOOP light up, confirm loopback works for
   your stream/recording, and see the measured loop delay in ms
@@ -37,7 +39,9 @@ no .NET needed. Unzip and run `motu-ui.exe`.
 - **Sample rate and buffer size** — apply instantly, with latency readout
 - **Low latency mode** — the driver switch the stock panel calls "Use lowest
   latency safety offsets"; here it's one click
-- **WaveSRC** — the driver's sample rate converter for Windows audio
+- **Sync rate** — syncs Windows' sample rate to the device, same switch and
+  polarity as the stock panel's checkbox (off = the driver's WaveSRC resampler
+  handles apps at other rates)
 - **Presets** — two buttons (Record / Stream by default), each editable via the
   pencil next to it; stored in a JSON file next to the exe
 - **Driver update check** — pulls the current version from motu.com for your
@@ -72,7 +76,7 @@ x86. Everything else (Windows App SDK runtime included) is self-contained.
 | Loopback monitor | no | yes — what OBS hears |
 | Test tone | no | yes — one-click signal check |
 | Low latency mode | yes ("safety offsets") | one click |
-| WaveSRC | yes | one click, tooltip explains |
+| Sample-rate sync | yes | same polarity as the stock checkbox |
 | Presets | no | editable |
 | Driver update check | no | per your model, from motu.com |
 | Window | fixed size | Mica, theme-aware, resizable |
@@ -92,10 +96,13 @@ Yes — motu-ui is a third-party alternative. Other third-party MOTU tools
 target the older AVB interfaces (UltraLite AVB, 1248, 16A), which M-series
 units are not.
 
-**What is WaveSRC on a MOTU interface?**
-Wave Sample Rate Conversion — the driver-level resampler for normal Windows
-(WAVE) audio. On: apps can run at any sample rate and the driver converts.
-Off: apps must match the device rate exactly, for a bit-exact path.
+**What is WaveSRC / "Sync Windows sample rate" on a MOTU interface?**
+They're the same driver flag, shown with opposite polarity. WaveSRC is the
+driver-level resampler for Windows (WAVE) audio: on, apps can run at any
+sample rate; off, apps must match the device rate for a bit-exact path. The
+stock panel's "Sync Windows sample rate to device" checkbox is checked when
+WaveSRC is off — motu-ui's SYNC RATE toggle matches the stock checkbox, so
+both panels always agree.
 
 **Does motu-ui replace the MOTU driver?**
 No. It uses the official M-Series driver library, so the driver must be
@@ -114,3 +121,8 @@ multi-channel models.
 - On M4/M6 the meters show the first stereo pair.
 - Changing sample rate or buffer invalidates the audio endpoints for a moment;
   the meters reconnect automatically.
+- The app touches the driver only while a control is actually used — an idle
+  motu-ui holds no device session, so the stock panel keeps working alongside
+  it.
+- Per-app mutes in the ON AIR list set the app's Windows session volume —
+  they silence it everywhere, not just on the stream.

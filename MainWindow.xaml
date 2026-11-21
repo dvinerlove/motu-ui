@@ -193,11 +193,11 @@
                     <ComboBox x:Name="BufBox" HorizontalAlignment="Stretch" Height="36"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Spacing="6">
-                    <TextBlock Text="WAVESRC" Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
+                    <TextBlock Text="SYNC RATE" Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Button x:Name="SrcSwitch" HorizontalAlignment="Stretch" Height="36"
                             Padding="12,0" HorizontalContentAlignment="Left"
-                            ToolTipService.ToolTip="driver resamples Windows audio to the device rate — on: apps at any rate work, off: bit-exact when everything matches">
+                            ToolTipService.ToolTip="sync Windows sample rate to the device — on: bit-exact when everything matches; off: the driver resamples Windows audio so apps at any rate work">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse x:Name="SrcDot" Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{ThemeResource TextFillColorTertiaryBrush}"/>

@@ -34,9 +34,9 @@
   </Company_Info>
   <Program_Info>
     <Program_Name>motu-ui</Program_Name>
-    <Program_Version>1.0.0</Program_Version>
-    <Program_Release_Month>01</Program_Release_Month>
-    <Program_Release_Day>01</Program_Release_Day>
+    <Program_Version>1.1.0</Program_Version>
+    <Program_Release_Month>11</Program_Release_Month>
+    <Program_Release_Day>21</Program_Release_Day>
     <Program_Release_Year>2026</Program_Release_Year>
     <Program_Cost_Dollars>0</Program_Cost_Dollars>
     <Program_Cost_Other_Code></Program_Cost_Other_Code>
@@ -71,7 +71,7 @@
       <Char_Desc_45>MOTU M-series control panel for Windows</Char_Desc_45>
       <Char_Desc_80>Control panel for MOTU M2/M4/M6 interfaces: live meters, loopback monitor</Char_Desc_80>
       <Char_Desc_250>Small Windows utility for MOTU M2, M4 and M6 audio interfaces. Live input/output meters, loopback monitor showing what OBS hears, test tone, buffer size and sample rate control, low-latency mode, editable presets, driver update check.</Char_Desc_250>
-      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, puts every driver control (buffer size, sample rate, WaveSRC, low-latency mode) in one compact window, and offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128). A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
+      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, puts every driver control (buffer size, sample rate, sample-rate sync, low-latency mode) in one compact window, and offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128). A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
       <Char_Desc_2000>motu-ui is a free, open-source (MIT) Windows control panel for MOTU M2, M4 and M6 USB audio interfaces, built for people who record, stream or monitor through their interface every day.
 
 motu-ui puts everything the stock panel has - plus live metering it doesn't - in one compact native window:
@@ -79,7 +79,7 @@ motu-ui puts everything the stock panel has - plus live metering it doesn't - in
 - A third LOOP meter showing the loopback capture endpoint - exactly the signal OBS, Discord and other recorders receive
 - A test-tone button that plays a 440 Hz signal through the device so the loopback path can be verified visually
 - Sample rate (44.1-192 kHz) and host buffer size (16-1024 samples) with a live latency readout
-- WaveSRC and Low Latency toggles, plainly labeled with tooltips
+- Sync rate and Low Latency toggles, plainly labeled with tooltips
 - Editable named presets, for example Record: 16 samples + low latency, Stream: 128 samples
 - A driver update checker that queries the MOTU download page for your specific model
 
@@ -95,7 +95,7 @@ The app wraps the official MSeriesLib.dll that ships with the MOTU driver, so ch
       <Application_XML_File_URL>https://dvinerlove.github.io/motu-ui/pad_file.xml</Application_XML_File_URL>
     </Application_URLs>
     <Download_URLs>
-      <Primary_Download_URL>https://github.com/dvinerlove/motu-ui/releases/latest/download/motu-ui-v1.0.0-win-x86.zip</Primary_Download_URL>
+      <Primary_Download_URL>https://github.com/dvinerlove/motu-ui/releases/latest/download/motu-ui-v1.1.0-win-x86.zip</Primary_Download_URL>
       <Secondary_Download_URL>https://github.com/dvinerlove/motu-ui/releases</Secondary_Download_URL>
       <Additional_Download_URL_1></Additional_Download_URL_1>
       <Additional_Download_URL_2></Additional_Download_URL_2>

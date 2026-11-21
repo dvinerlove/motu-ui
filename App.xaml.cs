@@ -13,8 +13,10 @@ namespace MotuUI {
             // a process with no window looks like a failed launch (users click again).
             _window = new MainWindow();
             _window.Closed += (s, e) => {
-                // Free on the driver thread (affinity); it's background — no exit delay.
-                MOTU.Post(() => { try { MOTU.MSeriesFree(); } catch {} });
+                // A driver op frees its own session — give an in-flight one a
+                // moment to finish: exiting inside a session poisons the driver
+                // for the next client, like a hard kill does.
+                for (int i = 0; ((MainWindow)_window).drvBusy && i < 30; i++) Thread.Sleep(100);
             };
             _window.Activate();
             int retry = 0;
@@ -34,6 +36,7 @@ namespace MotuUI {
                     if (r == 0) break;
                     Thread.Sleep(300);
                 }
+                var w = (MainWindow)_window;
                 if (r != 0) {
                     try { MOTU.MSeriesFree(); } catch {}
                     if (retry < 4) {
@@ -44,12 +47,15 @@ namespace MotuUI {
                         } catch {}
                         q.TryEnqueue(() => Current.Exit());
                     } else {
-                        q.TryEnqueue(() => ((MainWindow)_window).NoDevice());
+                        q.TryEnqueue(() => w.NoDevice());
                     }
                     return;
                 }
-                MainWindow.SetDevice(d);
-                q.TryEnqueue(() => ((MainWindow)_window).DeviceReady());
+                // Read the initial state inside this session, then free it —
+                // holding the device would starve the stock control panel.
+                try { w.RefreshState(d); } catch {}
+                try { MOTU.MSeriesFree(); } catch {}
+                q.TryEnqueue(() => w.DeviceReady());
             });
         }
     }
