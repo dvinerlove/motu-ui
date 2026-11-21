@@ -22,17 +22,35 @@
                 <Button x:Name="BtnTest" Padding="10" MinWidth="36" MinHeight="32"
                         Background="Transparent" BorderThickness="0"
                         ToolTipService.ToolTip="play a test tone through the device — watch OUT and LOOP light up">
-                    <FontIcon Glyph="&#xE767;" FontSize="13"/>
+            <Button.Resources>
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+            </Button.Resources>
+            <FontIcon Glyph="&#xE767;" FontSize="13"/>
                 </Button>
                 <Button x:Name="BtnUpdate" Padding="10" MinWidth="36" MinHeight="32"
                         Background="Transparent" BorderThickness="0"
                         ToolTipService.ToolTip="check for driver update on motu.com">
-                    <FontIcon Glyph="&#xE896;" FontSize="13"/>
+            <Button.Resources>
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+            </Button.Resources>
+            <FontIcon Glyph="&#xE896;" FontSize="13"/>
                 </Button>
                 <Button x:Name="BtnRefresh" Padding="10" MinWidth="36" MinHeight="32"
                         Background="Transparent" BorderThickness="0"
                         ToolTipService.ToolTip="Re-read device state">
-                    <FontIcon Glyph="&#xE72C;" FontSize="13"/>
+            <Button.Resources>
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
+            </Button.Resources>
+            <FontIcon Glyph="&#xE72C;" FontSize="13"/>
                 </Button>
             </StackPanel>
         </Grid>

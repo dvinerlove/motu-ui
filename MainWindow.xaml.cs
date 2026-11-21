@@ -60,6 +60,8 @@ namespace MotuUI {
                 ApplyTitleBarTheme(root.ActualTheme);
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
+            // WinUI resets titlebar colors after minimize/restore — reapply on activation.
+            Activated += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
 
             RateBox.ItemsSource = new object[] { 44100, 48000, 88200, 96000, 176400, 192000 };
             BufBox.ItemsSource = new object[] { 16, 32, 64, 128, 256, 512, 1024 };
@@ -71,6 +73,10 @@ namespace MotuUI {
             cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
             cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
             cloop = Wasapi.OpenLoopback(out chLoop);
+            ToolTipService.SetToolTip(MeterInHost,
+                chIn > 2 ? chIn + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
+            ToolTipService.SetToolTip(MeterOutHost,
+                chOut > 2 ? chOut + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
 
             RateBox.SelectionChanged += (s, e) => {
                 if (loading || RateBox.SelectedItem == null) return;
