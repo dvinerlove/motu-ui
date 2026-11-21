@@ -11,19 +11,27 @@ namespace MotuUI {
             // MSeriesInit can block inside the driver — probe on a worker so a wedged
             // driver never produces a dead window.
             Task.Run(() => {
-                if (MOTU.MSeriesInit() != 0) return;
-                uint d = 0; int r = 1;
-                for (int i = 0; i < 20; i++) {
+                int r = MOTU.MSeriesInit();
+                uint d = 0;
+                for (int i = 0; r == 0 && i < 20; i++) {
                     r = MOTU.MSeriesGetDevice(0, out d);
                     if (r == 0) break;
                     Thread.Sleep(300);
                 }
-                if (r != 0) { MOTU.MSeriesFree(); return; }
+                if (r != 0) {
+                    // No device: free off-thread, then quit — a headless app has no UI to close it with.
+                    Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
+                    q.TryEnqueue(() => Current.Exit());
+                    return;
+                }
                 MainWindow.SetDevice(d);
                 q.TryEnqueue(() => {
                     _window = new MainWindow();
                     _window.Activate();
-                    _window.Closed += (s, e) => MOTU.MSeriesFree();
+                    _window.Closed += (s, e) => {
+                        // MSeriesFree can wedge inside the driver — never block exit on it.
+                        Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
+                    };
                 });
             });
         }
