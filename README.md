@@ -1,6 +1,9 @@
 # motu-ui
 
-A small Windows control panel for MOTU M-series audio interfaces (M2, M4, M6).
+An unofficial open-source control panel for MOTU M2, M4, and M6 audio
+interfaces on Windows — with live meters, driver-level controls the stock
+panel hides, and editable presets.
+
 It talks to the hardware through the official MOTU driver library, so nothing
 the device can't do is faked — the app just exposes more of it than the stock
 control panel does.
