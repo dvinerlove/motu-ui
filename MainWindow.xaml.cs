@@ -60,6 +60,7 @@ namespace MotuUI {
         }
         Preset[] presets;
         bool expOn;
+        int expH; // DIP the ON AIR card adds to the window height
         static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
         static readonly string CfgPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-cfg.txt");
 
@@ -81,7 +82,7 @@ namespace MotuUI {
             var root = (FrameworkElement)Content;
             root.Loaded += (s, e) => {
                 var rs = root.XamlRoot.RasterizationScale;
-                AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)(640 * rs)));
+                AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)((640 + expH) * rs)));
                 if (pres != null) { pres.PreferredMinimumWidth = (int)(560 * rs); pres.PreferredMinimumHeight = (int)(440 * rs); }
                 ApplyTitleBarTheme(root.ActualTheme);
             };
@@ -117,6 +118,12 @@ namespace MotuUI {
             };
             try { expOn = File.ReadAllText(CfgPath).Trim() == "1"; } catch {}
             PaintExp();
+            OnAirCard.SizeChanged += (s, e) => {
+                if (!expOn || OnAirCard.Visibility != Visibility.Visible) return;
+                int add = (int)Math.Ceiling(e.NewSize.Height + 12); // + row spacing
+                if (add == expH) return;
+                GrowWindow(add - expH); expH = add;
+            };
             LoadPresets();
             BtnRec.Click += (s, e) => ApplyPreset(0);
             BtnStream.Click += (s, e) => ApplyPreset(1);
@@ -226,7 +233,22 @@ namespace MotuUI {
         void PaintExp() {
             ExpIcon.Foreground = expOn ? (Microsoft.UI.Xaml.Media.Brush)On
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
-            OnAirCard.Visibility = expOn ? Visibility.Visible : Visibility.Collapsed;
+            if (expOn) OnAirCard.Visibility = Visibility.Visible; // SizeChanged grows the window
+            else {
+                int old = expH; expH = 0;
+                OnAirCard.Visibility = Visibility.Collapsed;
+                if (old > 0) GrowWindow(-old);
+            }
+        }
+
+        void GrowWindow(int dyDip) {
+            var aw = AppWindow;
+            if (aw == null) return;
+            double rs = Content.XamlRoot?.RasterizationScale ?? 1;
+            int dy = (int)Math.Round(dyDip * rs);
+            var s = aw.Size;
+            int h = Math.Max((int)(420 * rs), s.Height + dy);
+            if (h != s.Height) aw.Resize(new Windows.Graphics.SizeInt32(s.Width, h));
         }
 
         static readonly Microsoft.UI.Xaml.Media.SolidColorBrush On =
