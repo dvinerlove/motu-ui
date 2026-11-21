@@ -71,15 +71,15 @@
       <Char_Desc_45>MOTU M-series control panel for Windows</Char_Desc_45>
       <Char_Desc_80>Control panel for MOTU M2/M4/M6 interfaces: live meters, loopback monitor</Char_Desc_80>
       <Char_Desc_250>Small Windows utility for MOTU M2, M4 and M6 audio interfaces. Live input/output meters, loopback monitor showing what OBS hears, test tone, buffer size and sample rate control, low-latency mode, editable presets, driver update check.</Char_Desc_250>
-      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It exposes controls the stock MOTU panel hides (buffer size, sample rate, WaveSRC, low-latency mode), shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, and offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128). A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
+      <Char_Desc_450>motu-ui is a free, open-source Windows control panel for MOTU M2, M4 and M6 audio interfaces. It shows live input and output level meters plus a loopback monitor that displays exactly what OBS and other recorders hear, puts every driver control (buffer size, sample rate, WaveSRC, low-latency mode) in one compact window, and offers one-click editable presets (e.g. Record at 16 samples vs Stream at 128). A speaker button plays a test tone to verify the loopback path visually. A built-in checker queries the MOTU download page for your exact model when a newer driver ships.</Char_Desc_450>
       <Char_Desc_2000>motu-ui is a free, open-source (MIT) Windows control panel for MOTU M2, M4 and M6 USB audio interfaces, built for people who record, stream or monitor through their interface every day.
 
-The stock MOTU panel hides the settings that matter most. motu-ui puts them in one compact native window:
+motu-ui puts everything the stock panel has - plus live metering it doesn't - in one compact native window:
 - Live stereo level meters for IN and OUT with peak hold and clip indication
 - A third LOOP meter showing the loopback capture endpoint - exactly the signal OBS, Discord and other recorders receive
 - A test-tone button that plays a 440 Hz signal through the device so the loopback path can be verified visually
-- Sample rate (44.1-192 kHz) and host buffer size (16-2048 samples) with a live latency readout
-- WaveSRC and Low Latency toggles the stock panel doesn't expose
+- Sample rate (44.1-192 kHz) and host buffer size (16-1024 samples) with a live latency readout
+- WaveSRC and Low Latency toggles, plainly labeled with tooltips
 - Editable named presets, for example Record: 16 samples + low latency, Stream: 128 samples
 - A driver update checker that queries the MOTU download page for your specific model
 

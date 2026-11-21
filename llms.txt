@@ -6,8 +6,8 @@
 
 - There is no DSP mixer in M-series hardware — this is a control and
   status panel, not a mixer.
-- The first third-party M-series tool; existing MOTU utilities only cover
-  AVB interfaces.
+- A third-party M-series panel; other third-party MOTU tools target AVB
+  interfaces.
 - Windows 10/11, x86 (the vendor library is 32-bit), self-contained ~30MB
   zip, WinUI 3.
 

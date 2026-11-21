@@ -5,12 +5,11 @@
 [![downloads](https://img.shields.io/github/downloads/dvinerlove/motu-ui/total)](https://github.com/dvinerlove/motu-ui/releases)
 
 An unofficial open-source control panel for MOTU M2, M4, and M6 audio
-interfaces on Windows — with live meters, driver-level controls the stock
-panel hides, and editable presets.
+interfaces on Windows — with live meters, a loopback monitor, and editable
+presets the stock panel doesn't have.
 
-It talks to the hardware through the official MOTU driver library, so nothing
-the device can't do is faked — the app just exposes more of it than the stock
-control panel does.
+It talks to the hardware through the official MOTU driver library — every
+control is a real driver call, nothing is faked.
 
 ![demo](docs/demo.gif)
 
@@ -30,14 +29,15 @@ no .NET needed. Unzip and run `motu-ui.exe`.
   device, so you can watch OUT and LOOP light up and confirm loopback
   works for your stream/recording
 - **Sample rate and buffer size** — apply instantly, with latency readout
-- **Low latency mode** — driver-level switch that isn't exposed in the stock UI
+- **Low latency mode** — the driver switch the stock panel calls "Use lowest
+  latency safety offsets"; here it's one click
 - **WaveSRC** — the driver's sample rate converter for Windows audio
 - **Presets** — two buttons (Record / Stream by default), each editable via the
   pencil next to it; stored in a JSON file next to the exe
 - **Driver update check** — pulls the current version from motu.com for your
   specific model and runs the official installer if newer
 - Follows the system light/dark theme, scales correctly on high-DPI displays,
-  and shrinks to a compact meter strip
+  and resizes down to a compact window
 
 ## Requirements
 
@@ -65,8 +65,8 @@ x86. Everything else (Windows App SDK runtime included) is self-contained.
 | Live I/O meters | no | yes — peak hold + clip |
 | Loopback monitor | no | yes — what OBS hears |
 | Test tone | no | yes — one-click signal check |
-| Low latency mode | hidden | one click |
-| WaveSRC | hidden | one click, explained |
+| Low latency mode | yes ("safety offsets") | one click |
+| WaveSRC | yes | one click, tooltip explains |
 | Presets | no | editable |
 | Driver update check | no | per your model, from motu.com |
 | Window | fixed size | Mica, theme-aware, resizable |
@@ -82,8 +82,8 @@ software mixer for them. motu-ui is a control and status panel: it shows
 live meters and exposes every setting the driver actually has.
 
 **Is there software for the MOTU M2 besides the official panel?**
-Yes — motu-ui is the first third-party option. Existing MOTU tools only
-cover the older AVB interfaces (UltraLite AVB, 1248, 16A), which M-series
+Yes — motu-ui is a third-party alternative. Other third-party MOTU tools
+target the older AVB interfaces (UltraLite AVB, 1248, 16A), which M-series
 units are not.
 
 **What is WaveSRC on a MOTU interface?**

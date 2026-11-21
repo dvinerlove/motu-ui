@@ -22,8 +22,8 @@
 {"@type":"Question","name":"Is there a mixer for the MOTU M2?","acceptedAnswer":{"@type":"Answer","text":"The M-series has no DSP mixer in hardware — routing is fixed. What you can control is buffer size, sample rate, WaveSRC and low-latency mode, which is what motu-ui exposes, plus live meters the stock panel doesn't have."}},
 {"@type":"Question","name":"Can I hear my loopback in OBS?","acceptedAnswer":{"@type":"Answer","text":"The LOOP meter shows the level of the loopback capture endpoint — the exact signal OBS or any recorder receives. Press the speaker button to send a 440 Hz test tone and watch both OUT and LOOP light up."}},
 {"@type":"Question","name":"Does it work on the M4 and M6?","acceptedAnswer":{"@type":"Answer","text":"Yes. Device name, channel count and update page are read from the hardware. Meters show the first stereo pair on multichannel devices."}},
-{"@type":"Question","name":"What is WaveSRC?","acceptedAnswer":{"@type":"Answer","text":"An undocumented clock-source flag in the MOTU M-series driver, exposed by MSeriesLib. motu-ui toggles it the same way the official panel does."}},
-{"@type":"Question","name":"Is it safe? Does it replace the MOTU driver?","acceptedAnswer":{"@type":"Answer","text":"No — it wraps the official MSeriesLib.dll that ships with the MOTU driver. Every write is verified by reading state back from the device."}}
+{"@type":"Question","name":"What is WaveSRC?","acceptedAnswer":{"@type":"Answer","text":"Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio. On, apps can run at any sample rate; off, apps must match the device rate for a bit-exact path."}},
+{"@type":"Question","name":"Is it safe? Does it replace the MOTU driver?","acceptedAnswer":{"@type":"Answer","text":"No — it wraps the official MSeriesLib.dll that ships with the MOTU driver. Device state is read back after every change."}}
 ]}
 ]}
 </script>
@@ -52,7 +52,7 @@
 <main>
   <h1>motu-ui</h1>
   <p class="sub">A small Windows control panel for MOTU M2, M4 and M6 audio interfaces —
-  the meters and controls the stock MOTU panel doesn't show.</p>
+  the meters, loopback monitor and presets the stock MOTU panel doesn't have.</p>
   <p class="sub"><a class="gh" href="motu-m2-loopback-obs.html">Guide: MOTU M2/M4 loopback for OBS, Discord and recording &rarr;</a></p>
 
   <img src="demo.gif" alt="motu-ui live meters responding to a test tone">
@@ -65,8 +65,8 @@
     <li>Live stereo ladders for <b>IN</b> and <b>OUT</b> with peak hold and clip indication</li>
     <li><b>Loopback monitor</b> — a third meter showing exactly what OBS, Discord and other recorders hear</li>
     <li><b>Test tone</b> — one click plays 440&nbsp;Hz through the device so you can verify loopback visually</li>
-    <li>Sample rate (44.1–192&nbsp;kHz) and host buffer size (16–2048 samples) with live latency readout</li>
-    <li>WaveSRC and Low Latency toggles the stock panel hides</li>
+    <li>Sample rate (44.1–192&nbsp;kHz) and host buffer size (16–1024 samples) with live latency readout</li>
+    <li>WaveSRC and Low Latency toggles, plainly named with tooltips that say what they do</li>
     <li>Editable presets — e.g. <i>Record</i>: 16 samples + low latency, <i>Stream</i>: 128 samples</li>
     <li>Driver update check against the MOTU download page for your exact model</li>
   </ul>
@@ -102,11 +102,11 @@
     <dd>Yes. Device name, channel count and update page are read from the hardware.
     Meters show the first stereo pair on multichannel devices.</dd>
     <dt>What is WaveSRC?</dt>
-    <dd>An undocumented clock-source flag in the MOTU M-series driver, exposed by MSeriesLib.
-    motu-ui toggles it the same way the official panel does.</dd>
+    <dd>Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio.
+    On, apps can run at any sample rate; off, apps must match the device rate for a bit-exact path.</dd>
     <dt>Is it safe? Does it replace the MOTU driver?</dt>
     <dd>No — it wraps the official MSeriesLib.dll that ships with the MOTU driver.
-    Every write is verified by reading state back from the device.</dd>
+    Device state is read back after every change.</dd>
   </dl>
 
   <footer>
