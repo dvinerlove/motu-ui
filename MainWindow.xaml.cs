@@ -35,7 +35,6 @@ namespace MotuUI {
         int holdIL, holdIR, holdOL, holdOR, holdLL, holdLR;
         bool clipIn, clipOut, clipLoop;
         bool srcOn, llOn;
-        int reopens;
         bool loading;
         // loopback / on-air state
         bool loopMuted, recOn;
@@ -48,6 +47,12 @@ namespace MotuUI {
         readonly List<AirRow> airRows = new List<AirRow>();
         AirRow[] airSnapshot = new AirRow[0];
         readonly Dictionary<string, double> airDb = new Dictionary<string, double>();
+        // The capture worker owns every WASAPI client; the UI only reads this snapshot.
+        readonly object snapLock = new object();
+        double sIL = -100, sIR = -100, sOL = -100, sOR = -100, sLL = -100, sLR = -100;
+        DateTime snapUtc = DateTime.MinValue;
+        volatile bool needReopen = true;
+        int capFails;
 
         class AirRow {
             public string Key; public Wasapi.AirSession S;
@@ -87,14 +92,9 @@ namespace MotuUI {
 
             loading = true; // cleared by the first Drv refresh below
 
-            cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
-            cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
-            cloop = Wasapi.OpenLoopback(out chLoop, out _, out loopEpName);
-            loopMuted = Wasapi.GetLoopMuted();
-            ToolTipService.SetToolTip(MeterInHost,
-                chIn > 2 ? chIn + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
-            ToolTipService.SetToolTip(MeterOutHost,
-                chOut > 2 ? chOut + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
+            ToolTipService.SetToolTip(MeterInHost, "click to reset clip");
+            ToolTipService.SetToolTip(MeterOutHost, "click to reset clip");
+            Task.Run(CaptureLoop);
 
             RateBox.SelectionChanged += (s, e) => {
                 if (loading || RateBox.SelectedItem == null) return;
@@ -133,8 +133,13 @@ namespace MotuUI {
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += Tick;
             timer.Start();
-            Drv(() => {}); // initial state read, off the UI thread
+            if (dev != 0) Drv(() => {}); // initial state read, off the UI thread
+            else { StatusText.Text = "—"; InfoText.Text = "waiting for device…"; }
         }
+
+        // Called by App once the worker-side MSeriesInit probe resolves.
+        internal void DeviceReady() { Drv(() => {}); }
+        internal void NoDevice() { StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
 
         void ApplyTitleBarTheme(ElementTheme theme) {
             bool dark = theme == ElementTheme.Dark;
@@ -195,12 +200,11 @@ namespace MotuUI {
         // syncs LEDs/boxes back to the real device state.
         bool drvBusy;
         void Drv(Action call) {
-            if (drvBusy) return;
+            if (drvBusy || dev == 0) return;
             drvBusy = true;
-            timer.Stop();
             Task.Run(() => {
                 try { call(); RefreshState(); } catch {}
-                RunOnUI(() => { drvBusy = false; loading = false; ReopenCaptures(); Pulse(); });
+                RunOnUI(() => { drvBusy = false; loading = false; needReopen = true; Pulse(); });
             });
         }
 
@@ -358,20 +362,54 @@ namespace MotuUI {
             });
         }
 
-        void ReopenCaptures() {
-            timer.Stop();
+        // One worker owns every capture client: a wedged WASAPI call freezes the
+        // meters, never the window. UI reads only the snapshot under snapLock.
+        void CaptureLoop() {
+            while (true) {
+                try {
+                    if (needReopen) {
+                        needReopen = false;
+                        DoReopen();
+                    }
+                    double il, ir, ol, orr, ll, lr;
+                    if (!Wasapi.Peak2(cin, chIn, out il, out ir)) { il = ir = -100; }
+                    if (!Wasapi.Peak2(cout, chOut, out ol, out orr)) { ol = orr = -100; }
+                    if (!Wasapi.Peak2(cloop, chLoop, out ll, out lr)) { ll = lr = -100; }
+                    lock (snapLock) {
+                        sIL = il; sIR = ir; sOL = ol; sOR = orr; sLL = ll; sLR = lr;
+                        snapUtc = DateTime.UtcNow;
+                    }
+                    capFails = 0;
+                    Thread.Sleep(20);
+                } catch {
+                    if (++capFails > 5) { needReopen = true; capFails = 0; }
+                    Thread.Sleep(200);
+                }
+            }
+        }
+
+        void DoReopen() {
             if (cin != null) Marshal.ReleaseComObject(cin);
             if (cout != null) Marshal.ReleaseComObject(cout);
             if (cloop != null) Marshal.ReleaseComObject(cloop);
             cin = null; cout = null; cloop = null;
+            string name = "";
+            bool m = false;
             try {
                 cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
                 cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
-                cloop = Wasapi.OpenLoopback(out chLoop, out _, out loopEpName);
-                loopMuted = Wasapi.GetLoopMuted();
+                cloop = Wasapi.OpenLoopback(out chLoop, out _, out name);
+                m = Wasapi.GetLoopMuted();
             } catch {}
-            PaintLoopState();
-            timer.Start();
+            RunOnUI(() => {
+                loopEpName = name;
+                loopMuted = m;
+                PaintLoopState();
+                ToolTipService.SetToolTip(MeterInHost,
+                    chIn > 2 ? chIn + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
+                ToolTipService.SetToolTip(MeterOutHost,
+                    chOut > 2 ? chOut + " channels — showing first stereo pair; click to reset clip" : "click to reset clip");
+            });
         }
 
         static readonly Microsoft.UI.Xaml.Media.SolidColorBrush RedBrush =
@@ -540,16 +578,11 @@ namespace MotuUI {
         }
 
         void Tick(object s, object e) {
-            double il, ir, ol, orr, ll, lr;
-            try {
-                if (!Wasapi.Peak2(cin, chIn, out il, out ir)) { il = ir = -100; }
-                if (!Wasapi.Peak2(cout, chOut, out ol, out orr)) { ol = orr = -100; }
-                if (!Wasapi.Peak2(cloop, chLoop, out ll, out lr)) { ll = lr = -100; }
-            } catch {
-                if (reopens++ < 3) { ReopenCaptures(); return; }
-                timer.Stop(); return;
-            }
-            reopens = 0;
+            double il, ir, ol, orr, ll, lr; DateTime snapAt;
+            lock (snapLock) { il = sIL; ir = sIR; ol = sOL; orr = sOR; ll = sLL; lr = sLR; snapAt = snapUtc; }
+            // dead feed: decay everything and show "—" instead of frozen numbers
+            bool stale = (DateTime.UtcNow - snapAt).TotalSeconds > 1.5;
+            if (stale) { il = ir = ol = orr = ll = lr = -100; }
             // Meter ballistics: instant attack, ~30 dB/s release; peaks hold ~0.8s then fall.
             dIL = Math.Max(il, dIL - 1.5);
             dIR = Math.Max(ir, dIR - 1.5);
@@ -570,9 +603,9 @@ namespace MotuUI {
             MeterOut.SetLevels(dOL, dOR, pkOL, pkOR, clipOut);
             MeterLoop.SetLevels(dLL, dLR, pkLL, pkLR, clipLoop);
             double mxI = Math.Max(il, ir), mxO = Math.Max(ol, orr), mxL = Math.Max(ll, lr);
-            DbIn.Text = mxI <= -60 ? "-∞" : mxI.ToString(" 0.0;-0.0") + "dB";
-            DbOut.Text = mxO <= -60 ? "-∞" : mxO.ToString(" 0.0;-0.0") + "dB";
-            DbLoop.Text = cloop == null ? "—" : (mxL <= -60 ? "-∞" : mxL.ToString(" 0.0;-0.0") + "dB");
+            DbIn.Text = stale ? "—" : (mxI <= -60 ? "-∞" : mxI.ToString(" 0.0;-0.0") + "dB");
+            DbOut.Text = stale ? "—" : (mxO <= -60 ? "-∞" : mxO.ToString(" 0.0;-0.0") + "dB");
+            DbLoop.Text = (stale || cloop == null) ? "—" : (mxL <= -60 ? "-∞" : mxL.ToString(" 0.0;-0.0") + "dB");
 
             // ON AIR card: history strip, per-app meters, silence watchdog, status line.
             ticks++;
@@ -580,10 +613,10 @@ namespace MotuUI {
             if (ticks % 20 == 0) RefreshSessions();
             if (mxO > -30) outHot++; else outHot = 0;
             if (mxL <= -55) loopDead++; else loopDead = 0;
-            LoopWarn.Visibility = !loopMuted && cloop != null && outHot > 60 && loopDead > 60
+            LoopWarn.Visibility = !loopMuted && !stale && cloop != null && outHot > 60 && loopDead > 60
                 ? Visibility.Visible : Visibility.Collapsed;
             string note;
-            if (cloop == null) note = "no loopback endpoint";
+            if (cloop == null) note = stale ? "" : "no loopback endpoint";
             else if (recOn) { var el = DateTime.UtcNow - recStart; note = "rec " + (int)el.TotalMinutes + ":" + el.Seconds.ToString("00"); }
             else if (loopMuted) note = "muted";
             else if (loopMs >= 0) note = "≈ " + loopMs + " ms";

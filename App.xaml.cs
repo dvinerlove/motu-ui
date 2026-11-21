@@ -8,8 +8,14 @@ namespace MotuUI {
         public App() { InitializeComponent(); }
         protected override void OnLaunched(LaunchActivatedEventArgs args) {
             var q = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            // MSeriesInit can block inside the driver — probe on a worker so a wedged
-            // driver never produces a dead window.
+            // Show the window immediately: MSeriesInit can wedge inside the driver, and
+            // a process with no window looks like a failed launch (users click again).
+            _window = new MainWindow();
+            _window.Closed += (s, e) => {
+                // MSeriesFree can wedge inside the driver — never block exit on it.
+                Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
+            };
+            _window.Activate();
             Task.Run(() => {
                 int r = MOTU.MSeriesInit();
                 uint d = 0;
@@ -19,20 +25,12 @@ namespace MotuUI {
                     Thread.Sleep(300);
                 }
                 if (r != 0) {
-                    // No device: free off-thread, then quit — a headless app has no UI to close it with.
                     Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
-                    q.TryEnqueue(() => Current.Exit());
+                    q.TryEnqueue(() => ((MainWindow)_window).NoDevice());
                     return;
                 }
                 MainWindow.SetDevice(d);
-                q.TryEnqueue(() => {
-                    _window = new MainWindow();
-                    _window.Activate();
-                    _window.Closed += (s, e) => {
-                        // MSeriesFree can wedge inside the driver — never block exit on it.
-                        Task.Run(() => { try { MOTU.MSeriesFree(); } catch {} });
-                    };
-                });
+                q.TryEnqueue(() => ((MainWindow)_window).DeviceReady());
             });
         }
     }
