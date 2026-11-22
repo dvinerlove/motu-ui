@@ -15,7 +15,7 @@ control is a real driver call, nothing is faked.
 
 ## Download
 
-Grab `motu-ui-v1.1.2-win-x86.zip` from
+Grab `motu-ui-v1.1.3-win-x86.zip` from
 [Releases](https://github.com/dvinerlove/motu-ui/releases) — self-contained,
 no .NET needed. Unzip and run `motu-ui.exe`.
 

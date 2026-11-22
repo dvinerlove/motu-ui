@@ -57,6 +57,7 @@ namespace MotuUI {
         double sIL = -100, sIR = -100, sOL = -100, sOR = -100, sLL = -100, sLR = -100;
         DateTime snapUtc = DateTime.MinValue;
         volatile bool needReopen = true;
+        int loopRetry;
         int capFails;
 
         class AirRow {
@@ -66,6 +67,7 @@ namespace MotuUI {
         Preset[] presets;
         bool expOn;
         int expH; // DIP the ON AIR card adds to the window height
+        OverlappedPresenter pres;
         static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
         static readonly string CfgPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-cfg.txt");
 
@@ -83,12 +85,12 @@ namespace MotuUI {
             Title = "MOTU";
             try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "motu.ico")); } catch {}
             AppWindow.Resize(new Windows.Graphics.SizeInt32(680, 640));
-            var pres = AppWindow.Presenter as OverlappedPresenter;
+            pres = AppWindow.Presenter as OverlappedPresenter;
             var root = (FrameworkElement)Content;
             root.Loaded += (s, e) => {
                 var rs = root.XamlRoot.RasterizationScale;
                 AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)((640 + expH) * rs)));
-                if (pres != null) { pres.PreferredMinimumWidth = (int)(560 * rs); pres.PreferredMinimumHeight = (int)(440 * rs); }
+                ApplyMinSize(rs);
                 ApplyTitleBarTheme(root.ActualTheme);
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
@@ -270,10 +272,18 @@ namespace MotuUI {
             }
         }
 
+        void ApplyMinSize(double rs) {
+            if (pres == null) return;
+            pres.PreferredMinimumWidth = (int)(560 * rs);
+            // base 440 + ON AIR card, else the *-sized meters squash to slivers
+            pres.PreferredMinimumHeight = (int)((440 + expH) * rs);
+        }
+
         void GrowWindow(int dyDip) {
             var aw = AppWindow;
             if (aw == null) return;
             double rs = Content.XamlRoot?.RasterizationScale ?? 1;
+            ApplyMinSize(rs);
             int dy = (int)Math.Round(dyDip * rs);
             var s = aw.Size;
             int h = Math.Max((int)(420 * rs), s.Height + dy);
@@ -438,6 +448,9 @@ namespace MotuUI {
                         needReopen = false;
                         DoReopen();
                     }
+                    // loopback endpoint may appear late (driver still re-creating
+                    // endpoints after a rate/buffer change) — keep retrying
+                    if (cloop == null && ++loopRetry > 150) { needReopen = true; loopRetry = 0; }
                     if (loopLevelTarget >= 0f && loopLevelTarget != loopLevelApplied) {
                         Wasapi.SetLoopLevel(loopLevelTarget);
                         loopLevelApplied = loopLevelTarget;
