@@ -23,6 +23,8 @@
 {"@type":"Question","name":"Can I hear my loopback in OBS?","acceptedAnswer":{"@type":"Answer","text":"The LOOP meter shows the level of the loopback capture endpoint — the exact signal OBS or any recorder receives. Press the speaker button to send a 440 Hz test tone and watch both OUT and LOOP light up."}},
 {"@type":"Question","name":"Does it work on the M4 and M6?","acceptedAnswer":{"@type":"Answer","text":"Yes. Device name, channel count and update page are read from the hardware. Meters show the first stereo pair on multichannel devices."}},
 {"@type":"Question","name":"What is WaveSRC?","acceptedAnswer":{"@type":"Answer","text":"Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio. It's the same flag as the stock panel's 'Sync Windows sample rate' checkbox, shown with opposite polarity: sync on = WaveSRC off = bit-exact; sync off = WaveSRC resamples apps at any rate."}},
+{"@type":"Question","name":"What is LOW LATENCY?","acceptedAnswer":{"@type":"Answer","text":"The same switch as the stock panel's 'Use lowest latency safety offsets' checkbox. On = the driver reports a zero output safety offset (lowest latency, but some systems get clicks and pops); off = the normal offset. State is read back the same way the stock panel reads it."}},
+{"@type":"Question","name":"What do the ON AIR controls actually change?","acceptedAnswer":{"@type":"Answer","text":"WASAPI volumes, not the MOTU driver: the bus fader and mute set the loopback capture endpoint's Windows volume — how loud recorders hear it. Each app's level/mute is its Windows audio session volume, which is global: muting an app silences it for you too, not just on stream."}},
 {"@type":"Question","name":"Is it safe? Does it replace the MOTU driver?","acceptedAnswer":{"@type":"Answer","text":"No — it wraps the official MSeriesLib.dll that ships with the MOTU driver. Device state is read back after every change."}}
 ]}
 ]}
@@ -107,6 +109,22 @@
     <dd>Wave Sample Rate Conversion — the driver's resampler for Windows (WAVE) audio.
     Same flag as the stock panel's "Sync Windows sample rate" checkbox, shown inverted:
     sync on = WaveSRC off = bit-exact; sync off = WaveSRC resamples apps at any rate.</dd>
+    <dt>What is LOW LATENCY?</dt>
+    <dd>The same switch as the stock panel's "Use lowest latency safety offsets"
+    checkbox. On = the driver reports a zero output safety offset — lowest latency,
+    but some systems get clicks and pops; off = the normal offset. State is read
+    back the same way the stock panel reads it.</dd>
+    <dt>What do the ON AIR controls actually change?</dt>
+    <dd>WASAPI volumes, not the MOTU driver: the bus fader and mute set the loopback
+    capture endpoint's Windows volume — how loud recorders hear it. Each app's
+    level/mute is its Windows audio session volume, which is global: muting an app
+    silences it for you too, not just on stream.</dd>
+    <dt>How do the controls map to the stock panel?</dt>
+    <dd>SAMPLE RATE and BUFFER are the same driver calls as the stock dropdowns;
+    SYNC RATE is the stock "Sync Windows sample rate" checkbox (the WaveSRC flag
+    inverted); LOW LATENCY is "Use lowest latency safety offsets". The bus fader,
+    bus mute and per-app list have no stock equivalent — they live in Windows
+    audio, not in the driver.</dd>
     <dt>Is it safe? Does it replace the MOTU driver?</dt>
     <dd>No — it wraps the official MSeriesLib.dll that ships with the MOTU driver.
     Device state is read back after every change.</dd>

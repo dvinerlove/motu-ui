@@ -104,6 +104,25 @@ stock panel's "Sync Windows sample rate to device" checkbox is checked when
 WaveSRC is off — motu-ui's SYNC RATE toggle matches the stock checkbox, so
 both panels always agree.
 
+**What is LOW LATENCY?**
+The same switch as the stock panel's "Use lowest latency safety offsets"
+checkbox. On = the driver reports a zero output safety offset — lowest
+latency, but some systems get clicks and pops; off = the normal offset.
+The button reads the real device state the same way the stock panel does.
+
+**What do the ON AIR controls actually change?**
+WASAPI volumes, not the MOTU driver. The bus fader and mute set the loopback
+capture endpoint's Windows volume — how loud recorders hear it, independent
+of your monitor level. Each app's level/mute is its Windows session volume,
+which is global: muting an app silences it for you too, not just on stream.
+
+**How do the controls map to the stock panel?**
+SAMPLE RATE and BUFFER are the same driver calls as the stock dropdowns;
+SYNC RATE is the stock "Sync Windows sample rate" checkbox (the WaveSRC flag
+inverted); LOW LATENCY is "Use lowest latency safety offsets". The ON AIR
+controls have no stock equivalent — they live in Windows audio, not in the
+driver.
+
 **Does motu-ui replace the MOTU driver?**
 No. It uses the official M-Series driver library, so the driver must be
 installed. Think of it as a better front panel for the driver you already
