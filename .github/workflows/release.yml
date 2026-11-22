@@ -23,12 +23,16 @@ jobs:
       - name: Build
         run: dotnet build -c Release
 
+      - name: Publish (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: dotnet publish -c Release -r win-x86 --self-contained -p:PublishReadyToRun=true -o publish
+
       - name: Package (tags only)
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           $v = '${{ github.ref_name }}'.TrimStart('v')
-          Compress-Archive -Path 'bin\x86\Release\net10.0-windows10.0.19041.0\win-x86\*' `
+          Compress-Archive -Path 'publish\*' `
             -DestinationPath "motu-ui-v$v-win-x86.zip" -Force
 
       - name: Release (tags only)

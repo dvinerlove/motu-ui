@@ -3,8 +3,17 @@ using System.Runtime.InteropServices;
 
 namespace MotuUI {
     static class MOTU {
-        const string DIR = @"C:\Program Files (x86)\MOTU\CoreUAC";
+        static readonly string[] DIRS = {
+            @"C:\Program Files (x86)\MOTU\CoreUAC",
+            @"C:\Program Files\MOTU\CoreUAC",
+        };
         [DllImport("kernel32", SetLastError = true)] static extern bool SetDllDirectory(string p);
+
+        // False when MSeriesLib isn't on disk anywhere we know — the probe can
+        // then say "driver not installed" instead of wedging on a missing dll.
+        public static readonly bool HasDriver;
+        static string dllDir;
+        public static string DllDir { get { return dllDir; } }
 
         // MSeriesLib binds to the thread that first calls into it — calls from
         // random pool threads flake or wedge. Every library call goes through
@@ -12,7 +21,13 @@ namespace MotuUI {
         static readonly System.Collections.Concurrent.BlockingCollection<Action> _q =
             new System.Collections.Concurrent.BlockingCollection<Action>();
         static MOTU() {
-            SetDllDirectory(DIR);
+            foreach (var d in DIRS) {
+                if (System.IO.File.Exists(System.IO.Path.Combine(d, "MSeriesLib.dll"))) {
+                    dllDir = d;
+                    break;
+                }
+            }
+            if (dllDir != null) { SetDllDirectory(dllDir); HasDriver = true; }
             var t = new System.Threading.Thread(() => {
                 foreach (var a in _q.GetConsumingEnumerable()) { try { a(); } catch {} }
             });

@@ -170,6 +170,10 @@ namespace MotuUI {
             haveDev = true; loading = false; needReopen = true; Pulse();
         }
         internal void NoDevice() { StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
+        internal void NoDriver() {
+            StatusText.Text = "—";
+            InfoText.Text = "MOTU driver not installed — get it from motu.com";
+        }
 
         void ApplyTitleBarTheme(ElementTheme theme) {
             bool dark = theme == ElementTheme.Dark;
