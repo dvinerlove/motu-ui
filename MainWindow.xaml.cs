@@ -23,6 +23,8 @@ namespace MotuUI {
     }
 
     public sealed partial class MainWindow : Window {
+        [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr ins, int x, int y, int cx, int cy, uint f);
+
         // The probe only proves the device exists; every driver call then opens
         // a short init/free session — a session held for the app's lifetime
         // starves the stock control panel (it can't reach the device while a
@@ -90,8 +92,13 @@ namespace MotuUI {
                 ApplyTitleBarTheme(root.ActualTheme);
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
-            // WinUI resets titlebar colors after minimize/restore — reapply on activation.
-            Activated += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
+            // WinUI resets titlebar colors and misplaces the caption controls
+            // after minimize/restore — reapply colors and force a frame recalc.
+            Activated += (s, e) => {
+                ApplyTitleBarTheme(root.ActualTheme);
+                SetWindowPos(WinRT.Interop.WindowNative.GetWindowHandle(this), IntPtr.Zero,
+                    0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020); // NOSIZE|NOMOVE|NOZORDER|NOACTIVATE|FRAMECHANGED
+            };
 
             RateBox.ItemsSource = new object[] { 44100, 48000, 88200, 96000, 176400, 192000 };
             BufBox.ItemsSource = new object[] { 16, 32, 64, 128, 256, 512, 1024 };
