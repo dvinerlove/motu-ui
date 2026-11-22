@@ -211,7 +211,7 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Button x:Name="LlSwitch" HorizontalAlignment="Stretch" Height="36"
                             Padding="12,0" HorizontalContentAlignment="Left"
-                            ToolTipService.ToolTip="cuts extra driver buffering — for live monitoring/recording; keep off for stable playback (device can't report this state back)">
+                            ToolTipService.ToolTip="cuts extra driver buffering — for live monitoring/recording; keep off for stable playback">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse x:Name="LlDot" Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{ThemeResource TextFillColorTertiaryBrush}"/>

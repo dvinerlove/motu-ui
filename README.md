@@ -116,8 +116,8 @@ multi-channel models.
 
 ## Notes
 
-- Low latency mode has no read-back in the driver API — the button shows what
-  you set, not what the device reports.
+- Low latency mode is read back the same way the stock panel does it — a zero
+  output safety offset means it's on.
 - On M4/M6 the meters show the first stereo pair.
 - Changing sample rate or buffer invalidates the audio endpoints for a moment;
   the meters reconnect automatically.

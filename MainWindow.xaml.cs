@@ -213,6 +213,9 @@ namespace MotuUI {
                 RateBox.SelectedItem = (int)rate;
                 BufBox.SelectedItem = (int)buf;
                 srcOn = src != 0;
+                // Low latency = zero output safety offset, same read-back the stock
+                // panel uses; uint.MaxValue means the driver didn't report one.
+                if (xso != uint.MaxValue) llOn = xso == 0;
                 loading = was;
                 SyncLeds();
             });
