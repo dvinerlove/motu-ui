@@ -67,6 +67,8 @@ namespace MotuUI {
         Preset[] presets;
         bool expOn;
         int expH; // DIP the ON AIR card adds to the window height
+        DispatcherTimer fitTimer; // debounce: collapse rapid toggles into one resize request
+        int fitRetries; // re-asserts while the real size hasn't converged yet
         OverlappedPresenter pres;
         static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
         static readonly string CfgPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-cfg.txt");
@@ -84,14 +86,15 @@ namespace MotuUI {
             ToolTipService.SetToolTip(LoopNote, "playback→loopback delay measured by the last test tone");
             Title = "MOTU";
             try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "motu.ico")); } catch {}
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(680, 640));
             pres = AppWindow.Presenter as OverlappedPresenter;
             var root = (FrameworkElement)Content;
+            fitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            fitTimer.Tick += (s, e) => { fitTimer.Stop(); ResizeToFit(); };
             root.Loaded += (s, e) => {
-                var rs = root.XamlRoot.RasterizationScale;
-                AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(680 * rs), (int)((640 + expH) * rs)));
-                ApplyMinSize(rs);
+                ApplyMinSize(root.XamlRoot.RasterizationScale);
                 ApplyTitleBarTheme(root.ActualTheme);
+                ResizeToFit();
+                ScheduleFit(); // re-assert once in-flight resizes have settled
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
             // WinUI resets titlebar colors and misplaces the caption controls
@@ -132,9 +135,10 @@ namespace MotuUI {
             PaintExp();
             OnAirCard.SizeChanged += (s, e) => {
                 if (!expOn || OnAirCard.Visibility != Visibility.Visible) return;
-                int add = (int)Math.Ceiling(e.NewSize.Height + 12); // + row spacing
-                if (add == expH) return;
-                GrowWindow(add - expH); expH = add;
+                int h = (int)Math.Ceiling(e.NewSize.Height + 12); // + row spacing
+                if (h == expH) return; // fires per animation frame too — ignore noise
+                expH = h;
+                ScheduleFit();
             };
             LoadPresets();
             BtnRec.Click += (s, e) => ApplyPreset(0);
@@ -268,13 +272,23 @@ namespace MotuUI {
         void PaintExp() {
             ExpIcon.Foreground = expOn ? (Microsoft.UI.Xaml.Media.Brush)On
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
-            if (expOn) OnAirCard.Visibility = Visibility.Visible; // SizeChanged grows the window
-            else {
-                int old = expH; expH = 0;
+            if (expOn) {
+                OnAirCard.Visibility = Visibility.Visible;
+                // SizeChanged doesn't fire when re-shown at the same size, so
+                // read the real height once the layout pass has completed
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => {
+                    if (!expOn) return;
+                    expH = (int)Math.Ceiling(OnAirCard.ActualHeight + 12); // + row spacing
+                    ScheduleFit();
+                });
+            } else {
+                expH = 0;
                 OnAirCard.Visibility = Visibility.Collapsed;
-                if (old > 0) GrowWindow(-old);
             }
+            ScheduleFit();
         }
+
+        void ScheduleFit() { fitRetries = 0; fitTimer.Stop(); fitTimer.Start(); }
 
         void ApplyMinSize(double rs) {
             if (pres == null) return;
@@ -283,15 +297,21 @@ namespace MotuUI {
             pres.PreferredMinimumHeight = (int)((440 + expH) * rs);
         }
 
-        void GrowWindow(int dyDip) {
+        // Absolute target — not a delta. AppWindow.Resize lands asynchronously
+        // and out of order, so an earlier in-flight request can undo ours:
+        // re-check the real size until it converges (cap for screens that
+        // physically can't reach the target height).
+        void ResizeToFit() {
             var aw = AppWindow;
             if (aw == null) return;
             double rs = Content.XamlRoot?.RasterizationScale ?? 1;
             ApplyMinSize(rs);
-            int dy = (int)Math.Round(dyDip * rs);
             var s = aw.Size;
-            int h = Math.Max((int)(420 * rs), s.Height + dy);
-            if (h != s.Height) aw.Resize(new Windows.Graphics.SizeInt32(s.Width, h));
+            int w = (int)(680 * rs);
+            int h = (int)Math.Round((640 + expH) * rs);
+            if (w == s.Width && h == s.Height) return;
+            aw.Resize(new Windows.Graphics.SizeInt32(w, h));
+            if (++fitRetries < 30) { fitTimer.Stop(); fitTimer.Start(); }
         }
 
         static readonly Microsoft.UI.Xaml.Media.SolidColorBrush On =
