@@ -115,21 +115,28 @@ namespace MotuUI {
         static readonly Guid IID_IAudioCaptureClient = new Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317");
         static readonly PROPERTYKEY PKEY_Name = new PROPERTYKEY { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 14 };
 
+        [DllImport("ole32.dll")] static extern void PropVariantClear(ref PROPVARIANT v);
+
         static string FriendlyName(IMMDevice d) {
             IPropertyStore ps; if (d.OpenPropertyStore(0, out ps) != 0) return "";
             var k = PKEY_Name; PROPVARIANT v;
             if (ps.GetValue(ref k, out v) != 0) return "";
-            return Marshal.PtrToStringUni(v.p) ?? "";
+            try { return Marshal.PtrToStringUni(v.p) ?? ""; }
+            finally { PropVariantClear(ref v); }
         }
 
-        public static IAudioCaptureClient OpenCapture(EDataFlow flow) { return OpenCapture(flow, out _); }
+        public static IAudioCaptureClient OpenCapture(EDataFlow flow) { return OpenCapture(flow, out _, out _); }
 
         public static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels) {
+            return OpenCapture(flow, out channels, out _);
+        }
+
+        public static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, out IAudioClient owner) {
             // Capture endpoints carry channel-pair names ("In 1-2", "Loopback",
             // "Loopback Mix"); prefer the physical inputs, avoid virtual ones.
             return OpenCapture(flow, out channels, out _, out _,
                 flow == EDataFlow.eCapture ? "In " : null,
-                flow == EDataFlow.eCapture ? "Loopback" : null);
+                flow == EDataFlow.eCapture ? "Loopback" : null, out owner);
         }
 
         // First MOTU render endpoint, opened for actual playback (shared mode).
@@ -148,7 +155,7 @@ namespace MotuUI {
                 IntPtr pf; if (a.GetMixFormat(out pf) != 0) continue;
                 channels = Marshal.ReadInt16(pf, 2);
                 rate = Marshal.ReadInt32(pf, 4);
-                if (a.Initialize(0, 0, 0, 0, pf, IntPtr.Zero) != 0) continue;
+                if (a.Initialize(0, 0, 0, 0, pf, IntPtr.Zero) != 0) { Marshal.FreeCoTaskMem(pf); continue; }
                 object rc; if (a.GetService(IID_IAudioRenderClient, out rc) != 0) continue;
                 ac = a;
                 return (IAudioRenderClient)rc;
@@ -159,11 +166,13 @@ namespace MotuUI {
         static readonly Guid IID_IAudioRenderClient = new Guid("F294ACFC-3146-4483-A7BF-ADDCA7C260E2");
 
         // Blocking sine at mix-format rate — call from a worker thread.
+        // Capped: a stalled render stream must not spin here forever.
         public static unsafe void Tone(IAudioClient ac, IAudioRenderClient rc, int ch, int rate, double sec) {
             ac.Start();
             uint bufN; ac.GetBufferSize(out bufN);
             int total = (int)(rate * sec), wrote = 0;
-            while (wrote < total) {
+            var deadline = Environment.TickCount64 + (long)(sec * 1000) + 2000;
+            while (wrote < total && Environment.TickCount64 < deadline) {
                 uint pad; ac.GetCurrentPadding(out pad);
                 uint avail = bufN > pad ? bufN - pad : 0;
                 if (avail == 0) { Thread.Sleep(5); continue; }
@@ -189,13 +198,23 @@ namespace MotuUI {
         }
 
         public static IAudioCaptureClient OpenLoopback(out int channels, out int rate, out string epName) {
-            var cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", "Mix");
-            if (cc == null) cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", null);
+            return OpenLoopback(out channels, out rate, out epName, out _);
+        }
+
+        public static IAudioCaptureClient OpenLoopback(out int channels, out int rate, out string epName, out IAudioClient owner) {
+            var cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", "Mix", out owner);
+            if (cc == null) cc = OpenCapture(EDataFlow.eCapture, out channels, out rate, out epName, "Loopback", null, out owner);
             return cc;
         }
 
+        // owner = the IAudioClient the stream lives on; the caller must keep it
+        // referenced — a finalized client kills the stream mid-run.
         static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, out int rate, out string epName, string prefer, string avoid) {
-            channels = 2; rate = 48000; epName = "";
+            return OpenCapture(flow, out channels, out rate, out epName, prefer, avoid, out _);
+        }
+
+        static IAudioCaptureClient OpenCapture(EDataFlow flow, out int channels, out int rate, out string epName, string prefer, string avoid, out IAudioClient owner) {
+            channels = 2; rate = 48000; epName = ""; owner = null;
             var d = FindEndpoint(flow, out epName, prefer, avoid);
             if (d == null) return null;
             object o;
@@ -207,9 +226,11 @@ namespace MotuUI {
             int r = Marshal.ReadInt32(pf, 4);  // nSamplesPerSec
             if (r > 0) rate = r;
             int flags = (flow == EDataFlow.eRender) ? 0x00020000 : 0;
-            if (ac.Initialize(0, flags, 0, 0, pf, IntPtr.Zero) != 0) return null;
+            if (ac.Initialize(0, flags, 0, 0, pf, IntPtr.Zero) != 0) { Marshal.FreeCoTaskMem(pf); return null; }
+            Marshal.FreeCoTaskMem(pf);
             object cc; if (ac.GetService(IID_IAudioCaptureClient, out cc) != 0) return null;
             ac.Start();
+            owner = ac;
             return (IAudioCaptureClient)cc;
         }
 
@@ -356,7 +377,7 @@ namespace MotuUI {
             IntPtr p; int fl; ulong pos, qpc; double l = 0, r = 0;
             while (true) {
                 if (cc.GetBuffer(out p, out fr, out fl, out pos, out qpc) != 0) break;
-                if (fr > 0 && (fl & 1) == 0) {
+                if (fr > 0 && (fl & 2) == 0) { // skip SILENT packets, keep discontinuities
                     float* f = (float*)p;
                     for (uint i = 0; i + 1 < fr * ch; i += (uint)ch) {
                         float a = f[i] < 0 ? -f[i] : f[i]; if (a > l) l = a;

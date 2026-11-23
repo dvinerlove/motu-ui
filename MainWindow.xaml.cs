@@ -34,6 +34,7 @@ namespace MotuUI {
         int chIn = 2, chOut = 2, chLoop = 2;
         LedMeter MeterIn, MeterOut, MeterLoop;
         IAudioCaptureClient cin, cout, cloop;
+        IAudioClient acIn, acOut, acLoop; // stream owners — a finalized client kills its stream
         DispatcherTimer timer;
         double pkIL = -100, pkIR = -100, pkOL = -100, pkOR = -100, pkLL = -100, pkLR = -100;
         double dIL = -100, dIR = -100, dOL = -100, dOR = -100, dLL = -100, dLR = -100;
@@ -45,7 +46,7 @@ namespace MotuUI {
         bool loopMuted;
         string loopEpName = "";
         volatile float loopLevelTarget = -1f; // -1 = untouched; worker applies endpoint-side
-        float loopLevelApplied = -1f;
+        volatile float loopLevelApplied = -1f;
         long loopMs = -1;
         int ticks, outHot, loopDead;
         AirSpark airHistory;
@@ -147,7 +148,11 @@ namespace MotuUI {
             BtnEditStream.Click += (s, e) => EditPreset(1);
             BtnRefresh.Click += (s, e) => Drv(d => {});
             BtnTest.Click += (s, e) => TestTone();
-            BtnUpdate.Click += async (s, e) => await CheckDriverUpdate();
+            BtnUpdate.Click += async (s, e) => {
+                if (dlgOpen) return;
+                dlgOpen = true;
+                try { await CheckDriverUpdate(); } finally { dlgOpen = false; }
+            };
             MeterIn.Tapped += (s, e) => clipIn = false;
             MeterOut.Tapped += (s, e) => clipOut = false;
             MeterLoop.Tapped += (s, e) => clipLoop = false;
@@ -173,7 +178,7 @@ namespace MotuUI {
         internal void DeviceReady() {
             haveDev = true; loading = false; needReopen = true; Pulse();
         }
-        internal void NoDevice() { StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
+        internal void NoDevice() { loading = false; StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
         internal void NoDriver() {
             StatusText.Text = "—";
             InfoText.Text = "MOTU driver not installed — get it from motu.com";
@@ -205,7 +210,8 @@ namespace MotuUI {
 
         void RunOnUI(Action a) {
             var q = DispatcherQueue;
-            if (q != null && !q.HasThreadAccess) q.TryEnqueue(() => a()); else a();
+            if (q == null) return; // shutting down — dropping a paint is safe, a cross-thread touch is not
+            if (!q.HasThreadAccess) q.TryEnqueue(() => a()); else a();
         }
 
         // MSeriesLib calls can block for seconds inside the driver — read state off the
@@ -360,7 +366,14 @@ namespace MotuUI {
             });
         }
 
+        bool dlgOpen; // WinUI allows one ContentDialog at a time — swallow re-entrants
         async void EditPreset(int i) {
+            if (dlgOpen) return;
+            dlgOpen = true;
+            try { await EditPresetCore(i); } finally { dlgOpen = false; }
+        }
+
+        async Task EditPresetCore(int i) {
             var p = presets[i];
             var name = new TextBox { Text = p.Name, Header = "Name", MaxLength = 16 };
             var buf = new ComboBox { ItemsSource = new object[] { 16, 32, 64, 128, 256, 512, 1024 }, SelectedItem = p.Buffer, Header = "Buffer (samples)", HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -414,10 +427,11 @@ namespace MotuUI {
                 var prog = new ContentDialog { Title = "Downloading installer…", XamlRoot = Content.XamlRoot,
                     Content = new ProgressRing { IsActive = true, Width = 48, Height = 48, Margin = new Thickness(24) } };
                 var showing = prog.ShowAsync();
-                var exe = Path.Combine(Path.GetTempPath(), "MOTU-Setup-" + latest + ".exe");
-                File.WriteAllBytes(exe, await http.GetByteArrayAsync("https://motu.com/en-us/download-center/download/" + m.Groups[2].Value));
-                prog.Hide();
-                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+                try {
+                    var exe = Path.Combine(Path.GetTempPath(), "MOTU-Setup-" + latest + ".exe");
+                    File.WriteAllBytes(exe, await http.GetByteArrayAsync("https://motu.com/en-us/download-center/download/" + m.Groups[2].Value));
+                    Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+                } finally { prog.Hide(); } // a failed download must not leave the dialog up
             } catch (Exception ex) { await Info("Driver update", "Failed: " + ex.Message); }
         }
 
@@ -426,11 +440,12 @@ namespace MotuUI {
             if (testing) return;
             testing = true;
             Task.Run(() => {
-                IAudioClient ac = null; IAudioRenderClient rc = null; IAudioCaptureClient lc = null;
+                IAudioClient ac = null, lac = null; IAudioRenderClient rc = null; IAudioCaptureClient lc = null;
                 try {
                     int ch, rate, lch;
                     rc = Wasapi.OpenRender(out ac, out ch, out rate);
-                    lc = Wasapi.OpenLoopback(out lch);
+                    lc = Wasapi.OpenLoopback(out lch, out _, out _, out lac);
+                    if (lc == null) RunOnUI(() => loopMs = -1);
                     // drain stale packets so the first signal we see is this tone's
                     if (lc != null) {
                         uint fr; IntPtr p; int fl; ulong pos, qpc;
@@ -456,6 +471,7 @@ namespace MotuUI {
                     tone.Wait();
                 } catch {} finally {
                     if (lc != null) Marshal.ReleaseComObject(lc);
+                    if (lac != null) Marshal.ReleaseComObject(lac);
                     if (rc != null) Marshal.ReleaseComObject(rc);
                     if (ac != null) Marshal.ReleaseComObject(ac);
                     testing = false;
@@ -474,7 +490,8 @@ namespace MotuUI {
                     }
                     // loopback endpoint may appear late (driver still re-creating
                     // endpoints after a rate/buffer change) — keep retrying
-                    if (cloop == null && ++loopRetry > 150) { needReopen = true; loopRetry = 0; }
+                    if (cloop != null) loopRetry = 0;
+                    else if (++loopRetry > 150) { needReopen = true; loopRetry = 0; }
                     if (loopLevelTarget >= 0f && loopLevelTarget != loopLevelApplied) {
                         Wasapi.SetLoopLevel(loopLevelTarget);
                         loopLevelApplied = loopLevelTarget;
@@ -496,18 +513,22 @@ namespace MotuUI {
             }
         }
 
+        static void ReleaseCap(ref IAudioCaptureClient cc, ref IAudioClient ac) {
+            if (ac != null) { try { ac.Stop(); } catch {} try { Marshal.ReleaseComObject(ac); } catch {} ac = null; }
+            if (cc != null) { try { Marshal.ReleaseComObject(cc); } catch {} cc = null; }
+        }
+
         void DoReopen() {
-            if (cin != null) Marshal.ReleaseComObject(cin);
-            if (cout != null) Marshal.ReleaseComObject(cout);
-            if (cloop != null) Marshal.ReleaseComObject(cloop);
-            cin = null; cout = null; cloop = null;
+            ReleaseCap(ref cin, ref acIn);
+            ReleaseCap(ref cout, ref acOut);
+            ReleaseCap(ref cloop, ref acLoop);
             string name = "";
             bool m = false;
             float lv = 1f;
             try {
-                cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn);
-                cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut);
-                cloop = Wasapi.OpenLoopback(out chLoop, out _, out name);
+                cin = Wasapi.OpenCapture(EDataFlow.eCapture, out chIn, out acIn);
+                cout = Wasapi.OpenCapture(EDataFlow.eRender, out chOut, out acOut);
+                cloop = Wasapi.OpenLoopback(out chLoop, out _, out name, out acLoop);
                 m = Wasapi.GetLoopMuted();
                 lv = Wasapi.GetLoopLevel();
             } catch {}
@@ -538,10 +559,11 @@ namespace MotuUI {
         }
 
         // Session + mute enumeration runs on a worker — a wedged endpoint must not freeze the UI.
-        bool sessBusy;
+        bool sessBusy; long sessSince;
         void RefreshSessions() {
-            if (sessBusy) return;
-            sessBusy = true;
+            // a wedged enumeration must not freeze the list forever — retry after 10 s
+            if (sessBusy && Environment.TickCount64 - sessSince < 10000) return;
+            sessBusy = true; sessSince = Environment.TickCount64;
             Task.Run(() => {
                 List<Wasapi.AirSession> list = null; bool m = false; bool mok = false;
                 try { list = Wasapi.AirSessions(); m = Wasapi.GetLoopMuted(); mok = true; } catch {}

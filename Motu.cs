@@ -35,7 +35,15 @@ namespace MotuUI {
             t.Name = "mseries";
             t.Start();
         }
-        public static void Post(Action a) { _q.Add(a); }
+        static int inFlight;
+        // >0 while a posted op is queued or running — Closed waits on this so an
+        // in-flight session can free cleanly. (drvBusy can't be used for that:
+        // it's cleared via the UI thread, which is the one sleeping.)
+        public static int InFlight { get { return inFlight; } }
+        public static void Post(Action a) {
+            System.Threading.Interlocked.Increment(ref inFlight);
+            _q.Add(() => { try { a(); } finally { System.Threading.Interlocked.Decrement(ref inFlight); } });
+        }
 
         [DllImport("MSeriesLib.dll", CallingConvention = CallingConvention.StdCall)] public static extern int MSeriesInit();
         [DllImport("MSeriesLib.dll", CallingConvention = CallingConvention.StdCall)] public static extern int MSeriesFree();

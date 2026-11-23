@@ -34,7 +34,7 @@ namespace MotuUI {
                 // A driver op frees its own session — give an in-flight one a
                 // moment to finish: exiting inside a session poisons the driver
                 // for the next client, like a hard kill does.
-                for (int i = 0; ((MainWindow)_window).drvBusy && i < 30; i++) Thread.Sleep(100);
+                for (int i = 0; MOTU.InFlight > 0 && i < 30; i++) Thread.Sleep(100);
             };
             _window.Activate();
             int retry = 0;
@@ -55,14 +55,17 @@ namespace MotuUI {
                     if (retry > 0) Thread.Sleep(15000);
                     r = MOTU.MSeriesInit();
                     uint d = 0;
-                    for (int j = 0; r == 0 && j < 20; j++) {
-                        r = MOTU.MSeriesGetDevice(0, out d);
-                        if (r == 0) break;
-                        Thread.Sleep(300);
+                    // Same convention as the ops path: keep polling for a device
+                    // slot — it can enumerate late after init.
+                    for (int j = 0; r == 0 && d == 0 && j < 20; j++) {
+                        MOTU.MSeriesGetDevice(0, out d);
+                        if (d == 0) Thread.Sleep(300);
                     }
-                    if (r != 0) {
+                    if (r != 0 || d == 0) {
                         try { MOTU.MSeriesFree(); } catch {}
-                        if (retry < 4) {
+                        // init failed → driver probably still settling → relaunch;
+                        // init ok but no device → nothing to find, say so
+                        if (r != 0 && retry < 4) {
                             try {
                                 Process.Start(new ProcessStartInfo(
                                     Process.GetCurrentProcess().MainModule.FileName,
