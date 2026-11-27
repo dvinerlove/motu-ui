@@ -22,7 +22,7 @@
             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Button x:Name="BtnTest" Padding="10" MinWidth="36" MinHeight="32"
                         Background="Transparent" BorderThickness="0"
-                        ToolTipService.ToolTip="play a test tone through the device — watch OUT and LOOP light up">
+                        ToolTipService.ToolTip="play a test tone through the device: watch OUT and LOOP light up">
             <Button.Resources>
                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
@@ -111,7 +111,7 @@
                            Style="{ThemeResource CaptionTextBlockStyle}" CharacterSpacing="60"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 <Grid x:Name="MeterLoopHost" Grid.Row="2" Grid.Column="1" Margin="12,0" MinHeight="28"
-                      ToolTipService.ToolTip="loopback — playback audio as recorders hear it (what OBS captures); click to reset clip"/>
+                      ToolTipService.ToolTip="loopback: playback audio as recorders hear it (what OBS captures). Click to reset clip"/>
                 <TextBlock x:Name="DbLoop" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
                            FontFamily="Cascadia Mono, Consolas" FontSize="12" Width="72" Text="-&#x221E;"
                            TextAlignment="Right"
@@ -139,7 +139,7 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         <Border x:Name="MixBadge" Padding="5,0" CornerRadius="4" Visibility="Collapsed"
                                 Background="#22EBAF37" BorderBrush="#EBAF37" BorderThickness="1"
-                                ToolTipService.ToolTip="Loopback Mix is live — your mic rides the bus too, echo risk on stream">
+                                ToolTipService.ToolTip="Loopback Mix is live: your mic rides the bus too, echo risk on stream">
                             <TextBlock Text="MIX" FontSize="10" Foreground="#EBAF37"/>
                         </Border>
                         <TextBlock x:Name="LoopNote" VerticalAlignment="Center" FontSize="11"
@@ -148,13 +148,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Slider x:Name="LoopLevel" Width="110" Minimum="0" Maximum="100" StepFrequency="5"
                                 VerticalAlignment="Center"
-                                ToolTipService.ToolTip="bus level — how loud the stream hears this bus, independent of your headphone volume"/>
+                                ToolTipService.ToolTip="bus level: how loud the stream hears this bus, independent of your headphone volume"/>
                         <TextBlock x:Name="LoopLevelText" Text="100%" Width="34" VerticalAlignment="Center"
                                    FontFamily="Cascadia Mono, Consolas" FontSize="11" TextAlignment="Right"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         <Button x:Name="BtnLoopMute" Padding="10" MinWidth="32" MinHeight="28"
                                 Background="Transparent" BorderThickness="0"
-                                ToolTipService.ToolTip="mute the loopback bus — recorders hear nothing until you unmute">
+                                ToolTipService.ToolTip="mute the loopback bus. Recorders hear nothing until you unmute">
                             <Button.Resources>
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
                                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush"/>
@@ -168,7 +168,7 @@
 
                 <TextBlock x:Name="LoopWarn" Grid.Row="1" Visibility="Collapsed" FontSize="11"
                            Foreground="#EBAF37"
-                           Text="OUT is playing but the loop stays silent — recorders may be hearing nothing"/>
+                           Text="OUT is playing but the loop stays silent; recorders may be hearing nothing"/>
 
                 <StackPanel x:Name="AirSessions" Grid.Row="2" Spacing="4"/>
                 <Grid x:Name="AirHistoryHost" Grid.Row="3"/>
@@ -201,7 +201,7 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Button x:Name="SrcSwitch" HorizontalAlignment="Stretch" Height="36"
                             Padding="12,0" HorizontalContentAlignment="Left"
-                            ToolTipService.ToolTip="sync Windows sample rate to the device — on: bit-exact when everything matches; off: the driver resamples Windows audio so apps at any rate work">
+                            ToolTipService.ToolTip="sync Windows sample rate to the device. On: bit-exact when everything matches. Off: the driver resamples Windows audio so apps at any rate work">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse x:Name="SrcDot" Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{ThemeResource TextFillColorTertiaryBrush}"/>
@@ -215,7 +215,7 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Button x:Name="LlSwitch" HorizontalAlignment="Stretch" Height="36"
                             Padding="12,0" HorizontalContentAlignment="Left"
-                            ToolTipService.ToolTip="stock panel's &quot;lowest latency safety offsets&quot; — cuts extra driver buffering for live monitoring; keep off for stable playback">
+                            ToolTipService.ToolTip="stock panel's &quot;lowest latency safety offsets&quot;: cuts extra driver buffering for live monitoring. Keep off for stable playback">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse x:Name="LlDot" Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{ThemeResource TextFillColorTertiaryBrush}"/>
@@ -264,7 +264,7 @@
                 <StackPanel x:Name="WatchRow" Orientation="Horizontal" Spacing="8"
                             HorizontalAlignment="Center" Margin="0,22,0,0">
                     <Ellipse x:Name="WatchDot" Width="7" Height="7" VerticalAlignment="Center" Fill="#46CD6E"/>
-                    <TextBlock Text="watching for it — plug and play" FontSize="11"
+                    <TextBlock Text="watching for it" FontSize="11"
                                VerticalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                 </StackPanel>

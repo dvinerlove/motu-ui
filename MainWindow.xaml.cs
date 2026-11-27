@@ -280,8 +280,8 @@ namespace MotuUI {
             devUi = false;
             NoDevTitle.Text = driverMissing ? "driver not installed" : "no device connected";
             NoDevHint.Text = driverMissing
-                ? "motu-ui drives the box through the official MOTU M Series driver — install it, then plug your interface in"
-                : "plug in your M2, M4 or M6 — it connects by itself, no restart needed";
+                ? "motu-ui drives the box through the official MOTU M Series driver. Install it, then plug your interface in"
+                : "plug in your M2, M4 or M6. It connects by itself, no restart needed";
             WatchRow.Visibility = driverMissing ? Visibility.Collapsed : Visibility.Visible;
             NoDevDriverBtn.Visibility = driverMissing ? Visibility.Visible : Visibility.Collapsed;
             Title = "MOTU";
@@ -645,11 +645,11 @@ namespace MotuUI {
                 var html = await http.GetStringAsync("https://motu.com/en-us/download/product/" + page + "/");
                 var m = Regex.Match(Regex.Replace(html, @"\s+", " "),
                     @"fa-windows.{0,400}?PC v([\d.]+).{0,1500}?download-center/download/(\d+)");
-                if (!m.Success) { await Info("Driver update", "Couldn't find the Windows installer on motu.com — page layout may have changed."); return; }
+                if (!m.Success) { await Info("Driver update", "Couldn't find the Windows installer on motu.com. The page layout may have changed."); return; }
                 var cur = drvVer;
-                if (string.IsNullOrEmpty(cur)) { await Info("Driver update", "No device connected — can't read the installed driver version."); return; }
+                if (string.IsNullOrEmpty(cur)) { await Info("Driver update", "No device connected, so the installed driver version is unknown."); return; }
                 var latest = m.Groups[1].Value;
-                if (!Newer(latest, cur)) { await Info("Driver update", "Already up to date — v" + cur + "."); return; }
+                if (!Newer(latest, cur)) { await Info("Driver update", "Already up to date: v" + cur + "."); return; }
                 var ask = new ContentDialog {
                     Title = "Driver update available",
                     Content = "Installed:  " + cur + "\nLatest:  " + latest +
@@ -917,7 +917,7 @@ namespace MotuUI {
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
             };
-            ToolTipService.SetToolTip(btn, "mute this app — silences it for you and the stream (Windows session volume, not bus-only)");
+            ToolTipService.SetToolTip(btn, "mute this app: silences it for you and the stream (Windows session volume, not bus-only)");
             var row = r;
             btn.Click += (bs, be) => {
                 var s = row.S;
