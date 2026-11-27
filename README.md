@@ -13,15 +13,24 @@ control is a real driver call, nothing is faked.
 
 ![demo](docs/demo.gif)
 
+![main window with ON AIR card](docs/screenshot.png)
+
+<details><summary>More views</summary>
+
+![compact view](docs/screenshot-live.png)
+![settings](docs/screenshot-settings.png)
+
+</details>
+
 ## Download
 
 Grab either build from
 [Releases](https://github.com/dvinerlove/motu-ui/releases) — both are
 self-contained, no .NET needed:
 
-- **portable** `motu-ui-v1.1.7-win-x86-portable.exe` — a single file, nothing
+- **portable** `motu-ui-v1.1.8-win-x86-portable.exe` — a single file, nothing
   to unzip. On first launch it unpacks itself to a temp dir and runs.
-- **zip** `motu-ui-v1.1.7-win-x86.zip` — the classic loose layout; smaller
+- **zip** `motu-ui-v1.1.8-win-x86.zip` — the classic loose layout; smaller
   download, fastest startup. Unzip and run `motu-ui.exe`.
 
 Presets and settings live in `%LOCALAPPDATA%\motu-ui`, so both builds share
