@@ -533,7 +533,7 @@ namespace MotuUI {
             pres.PreferredMinimumWidth = (int)(560 * rs);
             // device UI: base 440 + ON AIR card, else the *-sized meters squash to
             // slivers; no-device overlay is a compact card, not a squeezed main UI
-            pres.PreferredMinimumHeight = (int)((devUi ? 440 + expH - MetersDelta() : 260) * rs);
+            pres.PreferredMinimumHeight = (int)((devUi ? 440 + expH - MetersDelta() : 300) * rs);
         }
 
         // Absolute target — not a delta. AppWindow.Resize lands asynchronously

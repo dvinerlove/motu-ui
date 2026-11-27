@@ -18,6 +18,7 @@ control is a real driver call, nothing is faked.
 <details><summary>More views</summary>
 
 ![compact view](docs/screenshot-compact.png)
+![no device](docs/screenshot-nodevice.png)
 ![settings](docs/screenshot-settings.png)
 
 </details>
