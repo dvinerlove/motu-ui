@@ -16,6 +16,12 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 namespace MotuUI {
+    public class UiSettings {
+        public bool InOut { get; set; } = true;
+        public bool Loop { get; set; } = true;
+        public bool OnAir { get; set; }
+    }
+
     public class Preset {
         public string Name { get; set; }
         public int Buffer { get; set; }
@@ -76,6 +82,9 @@ namespace MotuUI {
         Preset[] presets;
         bool expOn;
         int expH; // DIP the ON AIR card adds to the window height
+        UiSettings ui = new UiSettings();
+        int rowH;       // measured height of one meter row incl. spacing — 0 until layout
+        int metersCardH; // measured whole meters card incl. its row spacing
         DispatcherTimer fitTimer; // debounce: collapse rapid toggles into one resize request
         int fitRetries; // re-asserts while the real size hasn't converged yet
         OverlappedPresenter pres;
@@ -84,6 +93,7 @@ namespace MotuUI {
         static readonly string DataDir = InitDataDir();
         static readonly string PresetPath = Path.Combine(DataDir, "motu-ui-presets.json");
         static readonly string CfgPath = Path.Combine(DataDir, "motu-ui-cfg.txt");
+        static readonly string SettingsPath = Path.Combine(DataDir, "motu-ui-settings.json");
         internal static string CrashLogPath = Path.Combine(DataDir, "motu-ui-crash.txt");
 
         static string InitDataDir() {
@@ -119,6 +129,10 @@ namespace MotuUI {
             fitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             fitTimer.Tick += (s, e) => { fitTimer.Stop(); ResizeToFit(); };
             root.Loaded += (s, e) => {
+                if (rowH == 0 && MeterInHost.ActualHeight > 0) {
+                    rowH = (int)Math.Ceiling(MeterInHost.ActualHeight + 8);  // + RowSpacing
+                    metersCardH = (int)Math.Ceiling(MetersCard.ActualHeight + 12); // + grid RowSpacing
+                }
                 ApplyMinSize(root.XamlRoot.RasterizationScale);
                 ApplyTitleBarTheme(root.ActualTheme);
                 ResizeToFit();
@@ -162,13 +176,11 @@ namespace MotuUI {
             };
             SrcSwitch.Click += (s, e) => Drv(d => MOTU.MSeriesSetWaveSRCEnabled(d, srcOn ? 0u : 1u));
             LlSwitch.Click += (s, e) => Drv(d => { MOTU.MSeriesEnableLowLatencyMode(d, !llOn); llOn = !llOn; });
-            BtnExp.Click += (s, e) => {
-                expOn = !expOn;
-                try { File.WriteAllText(CfgPath, expOn ? "1" : "0"); } catch {}
-                PaintExp();
-            };
-            try { expOn = File.ReadAllText(CfgPath).Trim() == "1"; } catch {}
+            BtnExp.Click += (s, e) => OpenSettings();
+            LoadUiSettings();
+            expOn = ui.OnAir;
             PaintExp();
+            ApplyMetersLayout();
             OnAirCard.SizeChanged += (s, e) => {
                 if (!expOn || OnAirCard.Visibility != Visibility.Visible) return;
                 int h = (int)Math.Ceiling(e.NewSize.Height + 12); // + row spacing
@@ -208,7 +220,10 @@ namespace MotuUI {
                     RunOnUI(() => { loopMuted = m; PaintLoopState(); });
                 });
             };
-            LoopLevel.ValueChanged += (s, e) => loopLevelTarget = (float)e.NewValue / 100f;
+            LoopLevel.ValueChanged += (s, e) => {
+                loopLevelTarget = (float)e.NewValue / 100f;
+                LoopLevelText.Text = ((int)e.NewValue) + "%";
+            };
             PaintLoopState();
             StartAirPoller();
 
@@ -418,10 +433,84 @@ namespace MotuUI {
             Led(LlDot, LlState, llOn);
         }
 
+        void LoadUiSettings() {
+            try { ui = JsonSerializer.Deserialize<UiSettings>(File.ReadAllText(SettingsPath)) ?? new UiSettings(); }
+            catch {
+                ui = new UiSettings();
+                // one-time migration: the old cfg only knew the ON AIR toggle
+                try { ui.OnAir = File.ReadAllText(CfgPath).Trim() == "1"; } catch {}
+            }
+        }
+
+        void SaveUiSettings() {
+            try { File.WriteAllText(SettingsPath, JsonSerializer.Serialize(ui)); } catch {}
+        }
+
+        // Window height contribution of hidden meter rows: each hidden row frees
+        // its measured height; with all three gone the whole card (padding,
+        // scale, border) collapses too.
+        int MetersDelta() {
+            if (rowH == 0) return 0;
+            int hidden = (ui.InOut ? 0 : 2) + (ui.Loop ? 0 : 1);
+            if (hidden == 3) return metersCardH;
+            return hidden * rowH;
+        }
+
+        static readonly GridLength StarRow = new GridLength(1, GridUnitType.Star);
+        static readonly GridLength ZeroRow = new GridLength(0);
+
+        void SetRow(RowDefinition row, TextBlock lbl, FrameworkElement host, TextBlock db, bool vis) {
+            row.Height = vis ? StarRow : ZeroRow;
+            lbl.Visibility = host.Visibility = db.Visibility = vis ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void ApplyMetersLayout() {
+            SetRow(RowIn, LblIn, MeterInHost, DbIn, ui.InOut);
+            SetRow(RowOut, LblOut, MeterOutHost, DbOut, ui.InOut);
+            SetRow(RowLoop, LblLoop, MeterLoopHost, DbLoop, ui.Loop);
+            MetersCard.Visibility = !ui.InOut && !ui.Loop ? Visibility.Collapsed : Visibility.Visible;
+            ScheduleFit();
+        }
+
+        async void OpenSettings() {
+            if (dlgOpen) return;
+            dlgOpen = true;
+            try {
+                var io = new ToggleSwitch { Header = "IN / OUT meters", IsOn = ui.InOut, OnContent = "Shown", OffContent = "Hidden" };
+                var lp = new ToggleSwitch { Header = "Loopback meter", IsOn = ui.Loop, OnContent = "Shown", OffContent = "Hidden" };
+                var oa = new ToggleSwitch { Header = "ON AIR card", IsOn = ui.OnAir, IsEnabled = ui.Loop, OnContent = "Shown", OffContent = "Hidden", Margin = new Thickness(16, 0, 0, 0) };
+                var exp = new TextBlock {
+                    Text = "experimental", FontSize = 11,
+                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                    Margin = new Thickness(0, 6, 0, 0),
+                };
+                var credit = new HyperlinkButton {
+                    Content = "developed by dvinerlove  ·  source on GitHub",
+                    FontSize = 11, Padding = new Thickness(0),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                    Margin = new Thickness(0, 14, 0, 0),
+                    NavigateUri = new Uri("https://github.com/dvinerlove/motu-ui"),
+                };
+                var panel = new StackPanel { Spacing = 10, MinWidth = 300 };
+                panel.Children.Add(io);
+                panel.Children.Add(exp);
+                panel.Children.Add(lp);
+                panel.Children.Add(oa);
+                panel.Children.Add(credit);
+                var dlg = new ContentDialog {
+                    Title = "Settings", CloseButtonText = "Done",
+                    XamlRoot = Content.XamlRoot, Content = panel,
+                };
+                io.Toggled += (s2, e2) => { ui.InOut = io.IsOn; ApplyMetersLayout(); SaveUiSettings(); };
+                lp.Toggled += (s2, e2) => { ui.Loop = lp.IsOn; oa.IsEnabled = lp.IsOn; ApplyMetersLayout(); PaintExp(); SaveUiSettings(); };
+                oa.Toggled += (s2, e2) => { ui.OnAir = oa.IsOn; expOn = oa.IsOn; PaintExp(); SaveUiSettings(); };
+                await dlg.ShowAsync();
+            } finally { dlgOpen = false; }
+        }
+
         void PaintExp() {
-            ExpIcon.Foreground = expOn ? (Microsoft.UI.Xaml.Media.Brush)On
-                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
-            if (expOn) {
+            if (expOn && ui.Loop) {
                 OnAirCard.Visibility = Visibility.Visible;
                 // SizeChanged doesn't fire when re-shown at the same size, so
                 // read the real height once the layout pass has completed
@@ -444,7 +533,7 @@ namespace MotuUI {
             pres.PreferredMinimumWidth = (int)(560 * rs);
             // device UI: base 440 + ON AIR card, else the *-sized meters squash to
             // slivers; no-device overlay is a compact card, not a squeezed main UI
-            pres.PreferredMinimumHeight = (int)((devUi ? 440 + expH : 260) * rs);
+            pres.PreferredMinimumHeight = (int)((devUi ? 440 + expH - MetersDelta() : 260) * rs);
         }
 
         // Absolute target — not a delta. AppWindow.Resize lands asynchronously
@@ -458,7 +547,7 @@ namespace MotuUI {
             ApplyMinSize(rs);
             var s = aw.Size;
             int w = (int)(680 * rs);
-            int h = (int)Math.Round((devUi ? 640 + expH : 330) * rs);
+            int h = (int)Math.Round((devUi ? 640 + expH - MetersDelta() : 330) * rs);
             if (w == s.Width && h == s.Height) return;
             aw.Resize(new Windows.Graphics.SizeInt32(w, h));
             if (++fitRetries < 30) { fitTimer.Stop(); fitTimer.Start(); }
@@ -733,6 +822,9 @@ namespace MotuUI {
                 ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
             BtnLoopMute.IsEnabled = LoopLevel.IsEnabled = cloop != null;
+            LoopLevelText.Foreground = loopMuted
+                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
+                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         }
 
         // Session + mute enumeration runs on a worker — a wedged endpoint must not freeze the UI.
@@ -910,15 +1002,20 @@ namespace MotuUI {
             // breathing dot on the no-device screen — sine pulse, no storyboard
             if (!devUi) WatchDot.Opacity = 0.55 + 0.45 * Math.Sin(Environment.TickCount64 / 420.0);
 
-            // Hotplug watchdog: endpoint transitions come from the capture worker;
-            // probe the driver once they've settled (1.2 s) and not more often
-            // than every 3 s. Steady state costs nothing — no transitions, no probes.
+            // Hotplug watchdog: endpoint transitions arrive via OS events through
+            // the capture worker. Probe the driver once they've settled (0.8 s),
+            // not more often than every 2.5 s. Unplug is confirmed when the probe
+            // is blind AND endpoints haven't returned within 3.5 s — a settings
+            // re-enumeration brings them back sooner and cancels the flip.
             long nowMs = Environment.TickCount64;
             bool ep = epPresent;
             if (ep != epUi) { epUi = ep; epSince = nowMs; }
+            if (ep) blindSince = 0;
             bool need = (ep && !haveDev) || (!ep && haveDev);
-            if (need && !drvBusy && !probeBusy && nowMs - epSince > 1200 && nowMs - lastProbe > 3000)
+            if (need && !drvBusy && !probeBusy && nowMs - epSince > 800 && nowMs - lastProbe > 2500)
                 ProbeDevice();
+            if (!ep && haveDev && blindSince != 0 && nowMs - epSince > 3500)
+                DeviceGone();
         }
 
         static double Peak(double v, ref double pk, ref int hold) {
