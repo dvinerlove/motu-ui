@@ -15,9 +15,17 @@ control is a real driver call, nothing is faked.
 
 ## Download
 
-Grab `motu-ui-v1.1.6-win-x86.zip` from
-[Releases](https://github.com/dvinerlove/motu-ui/releases) — self-contained,
-no .NET needed. Unzip and run `motu-ui.exe`.
+Grab either build from
+[Releases](https://github.com/dvinerlove/motu-ui/releases) — both are
+self-contained, no .NET needed:
+
+- **portable** `motu-ui-v1.1.7-win-x86-portable.exe` — a single file, nothing
+  to unzip. On first launch it unpacks itself to a temp dir and runs.
+- **zip** `motu-ui-v1.1.7-win-x86.zip` — the classic loose layout; smaller
+  download, fastest startup. Unzip and run `motu-ui.exe`.
+
+Presets and settings live in `%LOCALAPPDATA%\motu-ui`, so both builds share
+the same state.
 
 ## What it does
 

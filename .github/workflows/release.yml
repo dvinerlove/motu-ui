@@ -23,21 +23,30 @@ jobs:
       - name: Build
         run: dotnet build -c Release
 
-      - name: Publish (tags only)
+      - name: Publish zip layout (tags only)
         if: startsWith(github.ref, 'refs/tags/')
         run: dotnet publish -c Release -r win-x86 --self-contained -p:PublishReadyToRun=true -o publish
+
+      - name: Publish portable single-exe (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: dotnet publish -c Release -r win-x86 --self-contained -p:PublishReadyToRun=true -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish-single
 
       - name: Package (tags only)
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           $v = '${{ github.ref_name }}'.TrimStart('v')
+          # crash-dump/debug infrastructure the app never uses
+          Remove-Item publish\createdump.exe, publish\mscordbi.dll, publish\mscordaccore.dll, publish\dbgshim.dll, publish\Microsoft.DiaSymReader.Native.x86.dll, publish\*.pdb -ErrorAction SilentlyContinue
           Compress-Archive -Path 'publish\*' `
             -DestinationPath "motu-ui-v$v-win-x86.zip" -Force
+          Copy-Item publish-single\motu-ui.exe "motu-ui-v$v-win-x86-portable.exe"
 
       - name: Release (tags only)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: motu-ui-v*-win-x86.zip
+          files: |
+            motu-ui-v*-win-x86.zip
+            motu-ui-v*-win-x86-portable.exe
           generate_release_notes: true
