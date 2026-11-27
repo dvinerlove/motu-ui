@@ -29,7 +29,8 @@ jobs:
 
       - name: Publish portable single-exe (tags only)
         if: startsWith(github.ref, 'refs/tags/')
-        run: dotnet publish -c Release -r win-x86 --self-contained -p:PublishReadyToRun=true -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish-single
+        run: dotnet publish -c Release -r win-x86 --self-contained -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish-single
+          # no PublishReadyToRun here: R2R+compression single-file crashes at startup (0x8007007E)
 
       - name: Package (tags only)
         if: startsWith(github.ref, 'refs/tags/')
