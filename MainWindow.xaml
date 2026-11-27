@@ -249,10 +249,6 @@
         </Grid>
 
         <Grid x:Name="NoDeviceOverlay" Grid.RowSpan="6" Visibility="Collapsed" Margin="-20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400">
                 <Border Width="56" Height="56" CornerRadius="28" HorizontalAlignment="Center"
                         BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
@@ -274,11 +270,11 @@
                 </StackPanel>
                 <Button x:Name="NoDevDriverBtn" Content="get the driver" Margin="0,18,0,0"
                         HorizontalAlignment="Center" Visibility="Collapsed"/>
+                <HyperlinkButton x:Name="NoDevCredit" HorizontalAlignment="Center"
+                                 Margin="0,26,0,0" Padding="8,4" Content="developed by dvinerlove  ·  source on GitHub"
+                                 FontSize="11"
+                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
             </StackPanel>
-            <HyperlinkButton x:Name="NoDevCredit" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                             Margin="0,0,0,34" Padding="8,4" Content="developed by dvinerlove  ·  source on GitHub"
-                             FontSize="11"
-                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
         </Grid>
     </Grid>
 </Window>
