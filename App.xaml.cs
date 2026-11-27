@@ -21,14 +21,15 @@ namespace MotuUI {
         }
         static void CrashLog(Exception ex) {
             try {
-                File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "motu-ui-crash.txt"),
+                File.AppendAllText(MainWindow.CrashLogPath,
                     DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + ex + "\n\n");
             } catch {}
         }
         protected override void OnLaunched(LaunchActivatedEventArgs args) {
             var q = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            // Show the window immediately: MSeriesInit can wedge inside the driver, and
-            // a process with no window looks like a failed launch (users click again).
+            // The window activates itself once its first frame is ready — activating
+            // here would show an unthemed black frame first. The driver probe runs
+            // on its own thread, so nothing depends on early visibility.
             _window = new MainWindow();
             _window.Closed += (s, e) => {
                 // A driver op frees its own session — give an in-flight one a
@@ -36,7 +37,6 @@ namespace MotuUI {
                 // for the next client, like a hard kill does.
                 for (int i = 0; MOTU.InFlight > 0 && i < 30; i++) Thread.Sleep(100);
             };
-            _window.Activate();
             int retry = 0;
             var a = args.Arguments ?? "";
             int ri = a.IndexOf("--retry ");

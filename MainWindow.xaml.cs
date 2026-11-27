@@ -41,6 +41,7 @@ namespace MotuUI {
         int holdIL, holdIR, holdOL, holdOR, holdLL, holdLR;
         bool clipIn, clipOut, clipLoop;
         bool srcOn, llOn;
+        bool shownOnce;
         bool loading;
         // loopback / on-air state
         bool loopMuted;
@@ -60,6 +61,13 @@ namespace MotuUI {
         volatile bool needReopen = true;
         int loopRetry;
         int capFails;
+        // hotplug: the capture worker polls endpoints (cheap, no driver session);
+        // the UI probes the driver only on transitions — a present endpoint with a
+        // blind driver means the driver is still re-enumerating after a settings
+        // change, while absent endpoints + blind driver twice in a row = unplugged.
+        volatile bool epPresent = true;
+        bool epUi = true, probeBusy, devUi = true;
+        long epSince, lastProbe, blindSince;
 
         class AirRow {
             public string Key; public Wasapi.AirSession S;
@@ -71,8 +79,27 @@ namespace MotuUI {
         DispatcherTimer fitTimer; // debounce: collapse rapid toggles into one resize request
         int fitRetries; // re-asserts while the real size hasn't converged yet
         OverlappedPresenter pres;
-        static readonly string PresetPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-presets.json");
-        static readonly string CfgPath = Path.Combine(AppContext.BaseDirectory, "motu-ui-cfg.txt");
+        // writable state lives in %LOCALAPPDATA% — next to the exe is read-only
+        // under Program Files and volatile in single-file extraction dirs
+        static readonly string DataDir = InitDataDir();
+        static readonly string PresetPath = Path.Combine(DataDir, "motu-ui-presets.json");
+        static readonly string CfgPath = Path.Combine(DataDir, "motu-ui-cfg.txt");
+        internal static string CrashLogPath = Path.Combine(DataDir, "motu-ui-crash.txt");
+
+        static string InitDataDir() {
+            try {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "motu-ui");
+                Directory.CreateDirectory(dir);
+                // one-time migration for installs that kept state next to the exe
+                foreach (var f in new[] { "motu-ui-presets.json", "motu-ui-cfg.txt" }) {
+                    var oldp = Path.Combine(AppContext.BaseDirectory, f);
+                    var newp = Path.Combine(dir, f);
+                    if (!File.Exists(newp) && File.Exists(oldp))
+                        try { File.Copy(oldp, newp); } catch {}
+                }
+                return dir;
+            } catch { return AppContext.BaseDirectory; }
+        }
 
         static string Str(byte[] b) { var s = Encoding.ASCII.GetString(b); int z = s.IndexOf('\0'); return z < 0 ? s : s.Substring(0, z); }
 
@@ -96,6 +123,14 @@ namespace MotuUI {
                 ApplyTitleBarTheme(root.ActualTheme);
                 ResizeToFit();
                 ScheduleFit(); // re-assert once in-flight resizes have settled
+                // Show only once the first frame is composed — an immediately
+                // activated WinUI window flashes black at its default size.
+                if (!shownOnce) {
+                    shownOnce = true;
+                    var show = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+                    show.Tick += (s2, e2) => { show.Stop(); Activate(); };
+                    show.Start();
+                }
             };
             root.ActualThemeChanged += (s, e) => ApplyTitleBarTheme(root.ActualTheme);
             // WinUI resets titlebar colors and misplaces the caption controls
@@ -156,6 +191,16 @@ namespace MotuUI {
             MeterIn.Tapped += (s, e) => clipIn = false;
             MeterOut.Tapped += (s, e) => clipOut = false;
             MeterLoop.Tapped += (s, e) => clipLoop = false;
+            NoDevDriverBtn.Click += (s, e) => {
+                try {
+                    Process.Start(new ProcessStartInfo("https://motu.com/en-us/download/product/408/") { UseShellExecute = true });
+                } catch {}
+            };
+            NoDevCredit.Click += (s, e) => {
+                try {
+                    Process.Start(new ProcessStartInfo("https://github.com/dvinerlove/motu-ui") { UseShellExecute = true });
+                } catch {}
+            };
             BtnLoopMute.Click += (s, e) => {
                 Task.Run(() => {
                     Wasapi.SetLoopMuted(!Wasapi.GetLoopMuted());
@@ -176,12 +221,103 @@ namespace MotuUI {
 
         // Called by App once the probe has found and released the device.
         internal void DeviceReady() {
-            haveDev = true; loading = false; needReopen = true; Pulse();
+            haveDev = true; loading = false; needReopen = true;
+            blindSince = 0;
+            ShowDeviceUi();
+            FlashTaskbar();
+            Pulse();
         }
-        internal void NoDevice() { loading = false; StatusText.Text = "—"; InfoText.Text = "no MOTU device found"; }
-        internal void NoDriver() {
-            StatusText.Text = "—";
-            InfoText.Text = "MOTU driver not installed — get it from motu.com";
+        internal void NoDevice() { loading = false; ShowNoDevice(false); }
+        internal void NoDriver() { loading = false; ShowNoDevice(true); }
+
+        void DeviceGone() {
+            haveDev = false;
+            blindSince = 0;
+            ShowNoDevice(false);
+            FlashTaskbar();
+        }
+
+        [DllImport("user32.dll")] static extern bool FlashWindowEx(ref FLASHWINFO f);
+        [StructLayout(LayoutKind.Sequential)]
+        struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
+        // Taskbar attention flash, same as a notification — no-op while the
+        // window already has focus, which is exactly how it should be.
+        void FlashTaskbar() {
+            try {
+                var f = new FLASHWINFO {
+                    cbSize = (uint)Marshal.SizeOf<FLASHWINFO>(),
+                    hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this),
+                    dwFlags = 3 | 12, // FLASHW_ALL | FLASHW_TIMERNOFG
+                    uCount = 6, dwTimeout = 0,
+                };
+                FlashWindowEx(ref f);
+            } catch {}
+        }
+
+        void ShowDeviceUi() {
+            devUi = true;
+            NoDeviceOverlay.Visibility = Visibility.Collapsed;
+
+            ScheduleFit();
+        }
+
+        void ShowNoDevice(bool driverMissing) {
+            devUi = false;
+            NoDevTitle.Text = driverMissing ? "driver not installed" : "no device connected";
+            NoDevHint.Text = driverMissing
+                ? "motu-ui drives the box through the official MOTU M Series driver — install it, then plug your interface in"
+                : "plug in your M2, M4 or M6 — it connects by itself, no restart needed";
+            WatchRow.Visibility = driverMissing ? Visibility.Collapsed : Visibility.Visible;
+            NoDevDriverBtn.Visibility = driverMissing ? Visibility.Visible : Visibility.Collapsed;
+            Title = "MOTU";
+            if (NoDeviceOverlay.Visibility != Visibility.Visible) {
+                NoDeviceOverlay.Opacity = 0;
+                NoDeviceOverlay.Visibility = Visibility.Visible;
+                var sb = new Storyboard();
+                var a = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(280)) };
+                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                Storyboard.SetTarget(a, NoDeviceOverlay);
+                Storyboard.SetTargetProperty(a, "Opacity");
+                sb.Children.Add(a);
+                sb.Begin();
+            }
+
+            ScheduleFit();
+        }
+
+        // Probe the driver once on the shared driver thread. Connect: endpoints
+        // appeared but haveDev is false. Unplug: endpoints gone while haveDev —
+        // the flip happens only if endpoints stay gone through a confirm window,
+        // so a settings-change re-enumeration (they return within seconds)
+        // never flashes the no-device screen.
+        void ProbeDevice() {
+            probeBusy = true;
+            lastProbe = Environment.TickCount64;
+            MOTU.Post(() => {
+                bool found = false;
+                try {
+                    if (MOTU.MSeriesInit() == 0) {
+                        uint d = 0;
+                        for (int j = 0; d == 0 && j < 6; j++) {
+                            MOTU.MSeriesGetDevice(0, out d);
+                            if (d == 0) Thread.Sleep(250);
+                        }
+                        if (d != 0) {
+                            found = true;
+                            if (!haveDev) try { RefreshState(d); } catch {}
+                        }
+                    }
+                } catch {} finally { try { MOTU.MSeriesFree(); } catch {} }
+                RunOnUI(() => {
+                    probeBusy = false;
+                    if (found) {
+                        blindSince = 0;
+                        if (!haveDev) DeviceReady();
+                    } else {
+                        blindSince = Environment.TickCount64;
+                    }
+                });
+            });
         }
 
         void ApplyTitleBarTheme(ElementTheme theme) {
@@ -190,6 +326,9 @@ namespace MotuUI {
             var bg = dark
                 ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
                 : Windows.UI.Color.FromArgb(255, 240, 240, 240);
+            // The empty-state overlay must hide the main UI completely — an
+            // opaque solid in the window's own color, not a translucent card brush.
+            NoDeviceOverlay.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(bg);
             tb.BackgroundColor = bg;
             tb.InactiveBackgroundColor = bg;
             tb.ButtonBackgroundColor = bg;
@@ -199,13 +338,17 @@ namespace MotuUI {
             tb.ButtonForegroundColor = fg;
             tb.ButtonHoverForegroundColor = fg;
             tb.ButtonPressedForegroundColor = fg;
-            byte hov = 16, prs = 32;
+            // WinUI ignores the alpha channel of caption-button colors — a
+            // 6%-alpha white hover paints as opaque white. Pre-blend against
+            // the titlebar background and pass opaque colors instead.
+            // dark bg 32: hover 32+223*16/255≈46, pressed 32+223*32/255≈60
+            // light bg 240: hover 240*(1-16/255)≈225, pressed 240*(1-32/255)≈210
             tb.ButtonHoverBackgroundColor = dark
-                ? Windows.UI.Color.FromArgb(hov, 255, 255, 255)
-                : Windows.UI.Color.FromArgb(hov, 0, 0, 0);
+                ? Windows.UI.Color.FromArgb(255, 46, 46, 46)
+                : Windows.UI.Color.FromArgb(255, 225, 225, 225);
             tb.ButtonPressedBackgroundColor = dark
-                ? Windows.UI.Color.FromArgb(prs, 255, 255, 255)
-                : Windows.UI.Color.FromArgb(prs, 0, 0, 0);
+                ? Windows.UI.Color.FromArgb(255, 60, 60, 60)
+                : Windows.UI.Color.FromArgb(255, 210, 210, 210);
         }
 
         void RunOnUI(Action a) {
@@ -299,8 +442,9 @@ namespace MotuUI {
         void ApplyMinSize(double rs) {
             if (pres == null) return;
             pres.PreferredMinimumWidth = (int)(560 * rs);
-            // base 440 + ON AIR card, else the *-sized meters squash to slivers
-            pres.PreferredMinimumHeight = (int)((440 + expH) * rs);
+            // device UI: base 440 + ON AIR card, else the *-sized meters squash to
+            // slivers; no-device overlay is a compact card, not a squeezed main UI
+            pres.PreferredMinimumHeight = (int)((devUi ? 440 + expH : 260) * rs);
         }
 
         // Absolute target — not a delta. AppWindow.Resize lands asynchronously
@@ -314,7 +458,7 @@ namespace MotuUI {
             ApplyMinSize(rs);
             var s = aw.Size;
             int w = (int)(680 * rs);
-            int h = (int)Math.Round((640 + expH) * rs);
+            int h = (int)Math.Round((devUi ? 640 + expH : 330) * rs);
             if (w == s.Width && h == s.Height) return;
             aw.Resize(new Windows.Graphics.SizeInt32(w, h));
             if (++fitRetries < 30) { fitTimer.Stop(); fitTimer.Start(); }
@@ -481,9 +625,42 @@ namespace MotuUI {
 
         // One worker owns every capture client: a wedged WASAPI call freezes the
         // meters, never the window. UI reads only the snapshot under snapLock.
+        // References must live forever — a collected callback or enumerator
+        // silently ends the OS notifications.
+        static object epEnumKeepalive;
+        static object epNotifyKeepalive;
+
         void CaptureLoop() {
+            int epTick = 250; // evaluate endpoints on the first iteration
+            try {
+                var en = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
+                epNotifyKeepalive = new EpNotify();
+                en.RegisterEndpointNotificationCallback((IMMNotificationClient)epNotifyKeepalive);
+                epEnumKeepalive = en;
+            } catch {}
             while (true) {
                 try {
+                    // OS endpoint events are the real signal; the timer is only a
+                    // fallback in case a notification is ever missed.
+                    if (EpNotify.Dirty || ++epTick >= 250) {
+                        epTick = 0;
+                        EpNotify.Dirty = false;
+                        try { epPresent = Wasapi.MotuEndpointPresent(); } catch {}
+                    }
+                    if (!epPresent) {
+                        // box unplugged (or the driver is re-enumerating): the old
+                        // streams are dead either way — drop them, don't reopen
+                        // against nothing. needReopen rearms for when it returns.
+                        if (cin != null || cout != null || cloop != null) {
+                            ReleaseCap(ref cin, ref acIn);
+                            ReleaseCap(ref cout, ref acOut);
+                            ReleaseCap(ref cloop, ref acLoop);
+                            needReopen = true;
+                            RunOnUI(() => PaintLoopState());
+                        }
+                        Thread.Sleep(150);
+                        continue;
+                    }
                     if (needReopen) {
                         needReopen = false;
                         DoReopen();
@@ -729,6 +906,19 @@ namespace MotuUI {
             if (LoopNote.Text != note) LoopNote.Text = note;
             LoopNote.Foreground = loopMuted ? (Microsoft.UI.Xaml.Media.Brush)RedBrush
                 : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+            // breathing dot on the no-device screen — sine pulse, no storyboard
+            if (!devUi) WatchDot.Opacity = 0.55 + 0.45 * Math.Sin(Environment.TickCount64 / 420.0);
+
+            // Hotplug watchdog: endpoint transitions come from the capture worker;
+            // probe the driver once they've settled (1.2 s) and not more often
+            // than every 3 s. Steady state costs nothing — no transitions, no probes.
+            long nowMs = Environment.TickCount64;
+            bool ep = epPresent;
+            if (ep != epUi) { epUi = ep; epSince = nowMs; }
+            bool need = (ep && !haveDev) || (!ep && haveDev);
+            if (need && !drvBusy && !probeBusy && nowMs - epSince > 1200 && nowMs - lastProbe > 3000)
+                ProbeDevice();
         }
 
         static double Peak(double v, ref double pk, ref int hold) {

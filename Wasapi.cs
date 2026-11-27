@@ -12,6 +12,26 @@ namespace MotuUI {
     interface IMMDeviceEnumerator {
         int EnumAudioEndpoints(EDataFlow flow, int stateMask, [MarshalAs(UnmanagedType.Interface)] out IMMDeviceCollection coll);
         int GetDefaultAudioEndpoint(EDataFlow flow, ERole role, [MarshalAs(UnmanagedType.Interface)] out IMMDevice dev);
+        int RegisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
+        int UnregisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
+    }
+    // OS raises these on any audio endpoint add/remove/state change — the
+    // hotplug signal; polling becomes just a fallback.
+    [ComImport, Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMNotificationClient {
+        void OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string id, int state);
+        void OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string id);
+        void OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string id);
+        void OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string id);
+        void OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string id, PROPERTYKEY key);
+    }
+    class EpNotify : IMMNotificationClient {
+        public static volatile bool Dirty;
+        public void OnDeviceStateChanged(string id, int state) { Dirty = true; }
+        public void OnDeviceAdded(string id) { Dirty = true; }
+        public void OnDeviceRemoved(string id) { Dirty = true; }
+        public void OnDefaultDeviceChanged(int flow, int role, string id) { Dirty = true; }
+        public void OnPropertyValueChanged(string id, PROPERTYKEY key) { }
     }
     [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IMMDeviceCollection { int GetCount(out uint n); int Item(uint i, [MarshalAs(UnmanagedType.Interface)] out IMMDevice dev); }
@@ -255,6 +275,26 @@ namespace MotuUI {
             }
             epName = firstName;
             return first;
+        }
+
+        // Any active MOTU endpoint in either direction = the box is on the bus.
+        // Endpoints also vanish for a few seconds while the driver re-enumerates
+        // after a settings change — callers must probe the driver to tell that
+        // apart from a real unplug. Cheap enough to poll: no MSeries session.
+        public static bool MotuEndpointPresent() {
+            try {
+                var e = (IMMDeviceEnumerator)(object)new MMDeviceEnumeratorCom();
+                foreach (var flow in new[] { EDataFlow.eRender, EDataFlow.eCapture }) {
+                    IMMDeviceCollection coll;
+                    if (e.EnumAudioEndpoints(flow, 1, out coll) != 0) continue;
+                    uint n; coll.GetCount(out n);
+                    for (uint i = 0; i < n; i++) {
+                        IMMDevice d; coll.Item(i, out d);
+                        if (FriendlyName(d).Contains("MOTU")) return true;
+                    }
+                }
+            } catch {}
+            return false;
         }
 
         static IMMDevice FindLoopbackDevice() {
